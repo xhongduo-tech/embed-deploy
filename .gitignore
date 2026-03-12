@@ -1,0 +1,16 @@
+# 模型文件过大，不纳入版本控制，请从 Hugging Face 下载
+Models/
+
+# 离线部署二进制包（体积大，请按 README 链接自行下载）
+Base/
+
+# Docker 镜像导出文件（体积大）
+Images/
+
+# 系统与 IDE
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+*.log
