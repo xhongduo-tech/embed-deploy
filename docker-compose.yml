@@ -1,0 +1,128 @@
+# 10 节点向量化/重排序推理服务
+# 4×Embedding + 4×Reranker + Nginx 负载均衡
+# 前置条件：Models/ 目录已放置 bge-m3、bge-reranker-v2-m3 模型
+
+version: '3.8'
+
+x-model-base: &model-base
+  image: michaelf34/infinity:latest  # Docker Hub 官方镜像
+  volumes:
+    - ./Models:/models
+  ipc: host
+
+services:
+  # ================= Embedding 实例 (4个) =================
+  embed-1:
+    <<: *model-base
+    container_name: embed-1
+    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  embed-2:
+    <<: *model-base
+    container_name: embed-2
+    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+
+  embed-3:
+    <<: *model-base
+    container_name: embed-3
+    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['2']
+              capabilities: [gpu]
+
+  embed-4:
+    <<: *model-base
+    container_name: embed-4
+    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['3']
+              capabilities: [gpu]
+
+  # ================= Reranker 实例 (4个) =================
+  reranker-1:
+    <<: *model-base
+    container_name: reranker-1
+    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  reranker-2:
+    <<: *model-base
+    container_name: reranker-2
+    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+
+  reranker-3:
+    <<: *model-base
+    container_name: reranker-3
+    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['2']
+              capabilities: [gpu]
+
+  reranker-4:
+    <<: *model-base
+    container_name: reranker-4
+    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['3']
+              capabilities: [gpu]
+
+  # ================= Nginx 负载均衡 =================
+  nginx:
+    image: nginx:latest
+    container_name: model-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - embed-1
+      - embed-2
+      - embed-3
+      - embed-4
+      - reranker-1
+      - reranker-2
+      - reranker-3
+      - reranker-4

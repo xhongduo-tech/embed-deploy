@@ -289,6 +289,96 @@ sudo systemctl restart docker
 
 ---
 
+## 🚀 第五阶段：Docker 镜像下载与推理服务部署
+
+本阶段将部署 **Infinity 推理引擎** 与 **Nginx 负载均衡**，构建 8 节点（4×Embedding + 4×Reranker）推理集群。
+
+### 1. Infinity 引擎简介
+
+**Infinity**（[michaelfeil/infinity](https://github.com/michaelfeil/infinity)）是专为**高吞吐、低延迟的文本向量化（Embedding）和重排（Reranking）**设计的 AI 推理服务框架。可类比：在生成式 LLM 领域常用 vLLM 做推理加速；而在 RAG 的特征提取阶段，**Infinity 就是负责加速向量和重排模型的「vLLM」**。
+
+| 特性 | 说明 |
+|------|------|
+| **动态批处理** | 高并发请求自动合并为大 Batch 送入 GPU，压榨 V100 并行算力 |
+| **专精检索模型** | 针对 BGE-M3 等 Embedding/Reranker 模型深度优化，高 QPS |
+| **OpenAI 兼容** | 暴露 `/v1/embeddings`、`/v1/rerank` 等标准路径，LangChain 等框架可直接对接 |
+| **多引擎支持** | 支持 PyTorch、ONNX、TensorRT，可进一步压缩延迟 |
+
+### 2. 镜像下载（有网环境）
+
+在 **Mac** 上拉取时需指定 `--platform linux/amd64`，以生成适用于内网 Linux 服务器的镜像：
+
+```bash
+# Infinity 推理引擎（约 9GB）
+docker pull --platform linux/amd64 michaelf34/infinity:latest
+
+# Nginx 负载均衡
+docker pull --platform linux/amd64 nginx:latest
+```
+
+### 3. 导出为 .tar 文件（便于 U 盘拷贝）
+
+```bash
+# 导出 Infinity
+docker save -o infinity_latest_amd64.tar michaelf34/infinity:latest
+
+# 导出 Nginx
+docker save -o nginx_latest_amd64.tar nginx:latest
+```
+
+将生成的 `infinity_latest_amd64.tar`、`nginx_latest_amd64.tar` 拷贝至 U 盘，导入内网服务器。
+
+### 4. 内网服务器导入镜像
+
+```bash
+# 导入 Infinity
+docker load -i infinity_latest_amd64.tar
+
+# 导入 Nginx
+docker load -i nginx_latest_amd64.tar
+```
+
+### 5. 目录结构与启动
+
+确保以下结构就绪：
+
+```
+embed-deploy/
+├── Models/
+│   ├── bge-m3/              # 向量化模型（从 Hugging Face 下载）
+│   └── bge-reranker-v2-m3/  # 重排序模型（从 Hugging Face 下载）
+├── nginx/
+│   └── nginx.conf           # 负载均衡配置
+├── docker-compose.yml
+└── README.md
+```
+
+在项目根目录执行：
+
+```bash
+docker-compose up -d
+```
+
+所有节点显示为绿色（Up）即表示启动成功。服务对外暴露端口 **8080**。
+
+### 6. 验证与调用
+
+```bash
+# 健康检查（Embedding）
+curl -X POST http://localhost:8080/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"input": "测试文本", "model": "bge-m3"}'
+
+# 健康检查（Rerank）
+curl -X POST http://localhost:8080/v1/rerank \
+  -H "Content-Type: application/json" \
+  -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "bge-reranker-v2-m3"}'
+```
+
+> **注意：** 若使用离线导入的镜像，需确保 `docker-compose.yml` 中的 `image` 名称与 `docker load` 后的镜像名一致。若导入后镜像名为 `michaelf34/infinity:latest`，则无需修改。
+
+---
+
 ## 📋 实施检查清单
 
 | 阶段 | 检查项 | 验证命令 |
@@ -298,6 +388,9 @@ sudo systemctl restart docker
 | 三 | NVIDIA 驱动正常 | `nvidia-smi` 正常输出 |
 | 四 | Docker 运行正常 | `docker run --rm hello-world` |
 | 四 | GPU 透传可用 | `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi` |
+| 五 | 推理服务启动 | `docker-compose ps` 全部 Up |
+| 五 | Embedding 可用 | `curl -X POST http://localhost:8080/v1/embeddings ...` |
+| 五 | Rerank 可用 | `curl -X POST http://localhost:8080/v1/rerank ...` |
 
 ---
 
@@ -311,6 +404,8 @@ sudo systemctl restart docker
 |------|----------|------|----------|
 | **模型** | `Models/bge-m3/` | BGE-M3 向量化模型 | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
 | **模型** | `Models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 重排序模型 | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
+| **镜像** | `Images/` | Infinity 推理引擎 | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
+| **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |
 | 一 | `Base/Kernel_Base/` | kernel / kernel-devel / kernel-headers | [麒麟 V10SP1.1 Packages](https://update.cs2c.com.cn/NS/V10/V10SP1.1/os/adv/lic/updates/x86_64/Packages/) |
 | 三 | `Base/` | NVIDIA-Linux-x86_64-550.163.01.run | [NVIDIA 数据中心驱动](https://www.nvidia.com/download/driverResults.aspx/243537/en-us/) |
 | 四 | `Base/Docker_Base/` | docker-24.0.9.tgz | [Docker 静态包](https://download.docker.com/linux/static/stable/x86_64/docker-24.0.9.tgz) |
