@@ -347,8 +347,10 @@ embed-deploy/
 ├── Models/
 │   ├── bge-m3/              # 向量化模型（从 Hugging Face 下载）
 │   └── bge-reranker-v2-m3/  # 重排序模型（从 Hugging Face 下载）
+├── web/
+│   └── index.html           # API 使用文档页端
 ├── nginx/
-│   └── nginx.conf           # 负载均衡配置
+│   └── nginx.conf           # 负载均衡与静态页配置
 ├── docker-compose.yml
 └── README.md
 ```
@@ -360,6 +362,10 @@ docker-compose up -d
 ```
 
 所有节点显示为绿色（Up）即表示启动成功。服务对外暴露端口 **8080**。
+
+### 6. 页端访问
+
+启动后，在浏览器访问 **http://\<服务器IP\>:8080/** 即可打开 **API 使用文档页**，提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等多种调用示例，支持一键复制。页端中的示例 URL 为 `http://api-embed.cs.icbc`，实际部署时请根据内网域名或 IP 替换。
 
 ### 6. 验证与调用
 
@@ -389,6 +395,7 @@ curl -X POST http://localhost:8080/v1/rerank \
 | 四 | Docker 运行正常 | `docker run --rm hello-world` |
 | 四 | GPU 透传可用 | `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi` |
 | 五 | 推理服务启动 | `docker-compose ps` 全部 Up |
+| 五 | 页端可访问 | 浏览器打开 `http://<IP>:8080/` |
 | 五 | Embedding 可用 | `curl -X POST http://localhost:8080/v1/embeddings ...` |
 | 五 | Rerank 可用 | `curl -X POST http://localhost:8080/v1/rerank ...` |
 
