@@ -1,19 +1,35 @@
-# 10 节点向量化/重排序推理服务
-# 4×Embedding + 4×Reranker + Nginx 负载均衡
-# 前置条件：Models/ 目录已放置 bge-m3、bge-reranker-v2-m3 模型
+# 8 节点向量化/重排序推理服务（双引擎架构）
+# ┌─ BGE 系列  → Infinity 引擎（保持原有路径，现有用户无感）
+# └─ Qwen 系列 → llama.cpp 引擎（原生 GGUF 支持，兼容 VL 多模态）
+#
+# GPU 分配：
+#   GPU 0 → embed-1 / embed-2 / embed-qwen-4b / embed-qwen-vl
+#   GPU 1 → reranker-1 / reranker-2 / reranker-qwen / reranker-qwen-vl
+#
+# 前置条件：Models/ 目录已放置所有对应模型（BGE 为 HF 格式，Qwen 为 GGUF 格式）
 
 version: '3.8'
 
-x-model-base: &model-base
-  image: michaelf34/infinity:latest  # Docker Hub 官方镜像
+# ── BGE 服务公共底座（Infinity 引擎）─────────────────────────────────
+x-infinity-base: &infinity-base
+  image: michaelf34/infinity:latest
+  volumes:
+    - ./Models:/models
+  ipc: host
+
+# ── Qwen 服务公共底座（llama.cpp CUDA 引擎）──────────────────────────
+x-llamacpp-base: &llamacpp-base
+  image: ghcr.io/ggerganov/llama.cpp:server-cuda
   volumes:
     - ./Models:/models
   ipc: host
 
 services:
-  # ================= Embedding 实例 (4个) =================
+  # ═══════════════════════════════════════════════════════════════════
+  # BGE Embedding（Infinity，GPU 0）—— 路径 /v1/embeddings，保持不变
+  # ═══════════════════════════════════════════════════════════════════
   embed-1:
-    <<: *model-base
+    <<: *infinity-base
     container_name: embed-1
     command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
     deploy:
@@ -25,46 +41,9 @@ services:
               capabilities: [gpu]
 
   embed-2:
-    <<: *model-base
+    <<: *infinity-base
     container_name: embed-2
     command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['1']
-              capabilities: [gpu]
-
-  embed-3:
-    <<: *model-base
-    container_name: embed-3
-    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['2']
-              capabilities: [gpu]
-
-  embed-4:
-    <<: *model-base
-    container_name: embed-4
-    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['3']
-              capabilities: [gpu]
-
-  # ================= Reranker 实例 (4个) =================
-  reranker-1:
-    <<: *model-base
-    container_name: reranker-1
-    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
     deploy:
       resources:
         reservations:
@@ -73,8 +52,78 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
 
+  # ═══════════════════════════════════════════════════════════════════
+  # Qwen Embedding（llama.cpp，GPU 0）—— 路径 /v1/qwen-embed 等
+  # ═══════════════════════════════════════════════════════════════════
+
+  # 纯文本向量化：Qwen3-Embedding-4B（GGUF）
+  # ⚠ 将下方 *.gguf 文件名替换为实际下载的量化版本，推荐 Q4_K_M
+  embed-qwen-4b:
+    <<: *llamacpp-base
+    container_name: embed-qwen-4b
+    command:
+      - "--model"
+      - "/models/qwen3-embedding-4b/Qwen3-Embedding-4B-Q4_K_M.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--embedding"       # 启用 embedding 模式，暴露 /v1/embeddings
+      - "--ctx-size"
+      - "4096"
+      - "-ngl"
+      - "99"                # 全部层卸载到 GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  # 多模态向量化：Qwen3-VL-Embedding-2B（GGUF，单文件，无 mmproj）
+  # "VL" 表示支持多模态输入，但本质是 Embedding 模型，加载方式与纯文本 GGUF 完全相同
+  # ⚠ 将文件名替换为实际下载的 GGUF 量化版本
+  embed-qwen-vl:
+    <<: *llamacpp-base
+    container_name: embed-qwen-vl
+    command:
+      - "--model"
+      - "/models/Qwen3-VL-Embedding-2B/Qwen3-VL-Embedding-2B-Q4_K_M.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--embedding"
+      - "--ctx-size"
+      - "4096"
+      - "-ngl"
+      - "99"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  # ═══════════════════════════════════════════════════════════════════
+  # BGE Reranker（Infinity，GPU 1）—— 路径 /v1/rerank，保持不变
+  # ═══════════════════════════════════════════════════════════════════
+  reranker-1:
+    <<: *infinity-base
+    container_name: reranker-1
+    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+
   reranker-2:
-    <<: *model-base
+    <<: *infinity-base
     container_name: reranker-2
     command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
     deploy:
@@ -85,31 +134,63 @@ services:
               device_ids: ['1']
               capabilities: [gpu]
 
-  reranker-3:
-    <<: *model-base
-    container_name: reranker-3
-    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+  # ═══════════════════════════════════════════════════════════════════
+  # Qwen Reranker（llama.cpp，GPU 1）—— 路径 /v1/qwen-rerank 等
+  # ═══════════════════════════════════════════════════════════════════
+
+  # 纯文本重排：Qwen3-Reranker-0.6B（GGUF）
+  reranker-qwen:
+    <<: *llamacpp-base
+    container_name: reranker-qwen
+    command:
+      - "--model"
+      - "/models/qwen3-reranker-0.6b/Qwen3-Reranker-0.6B-Q4_K_M.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--rerank"          # 启用 rerank 模式，暴露 /v1/rerank
+      - "--ctx-size"
+      - "4096"
+      - "-ngl"
+      - "99"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['2']
+              device_ids: ['1']
               capabilities: [gpu]
 
-  reranker-4:
-    <<: *model-base
-    container_name: reranker-4
-    command: ["v2", "--model-id", "/models/bge-reranker-v2-m3", "--port", "8000"]
+  # 多模态重排：Qwen3-VL-Reranker-2B（GGUF，单文件，无 mmproj）
+  # 同 VL-Embedding：本质是 Reranker 模型，单 GGUF 文件即可加载
+  # ⚠ 将文件名替换为实际下载的 GGUF 量化版本
+  reranker-qwen-vl:
+    <<: *llamacpp-base
+    container_name: reranker-qwen-vl
+    command:
+      - "--model"
+      - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B-Q4_K_M.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--rerank"
+      - "--ctx-size"
+      - "4096"
+      - "-ngl"
+      - "99"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['3']
+              device_ids: ['1']
               capabilities: [gpu]
 
-  # ================= Nginx 负载均衡 =================
+  # ═══════════════════════════════════════════════════════════════════
+  # Nginx 负载均衡
+  # ═══════════════════════════════════════════════════════════════════
   nginx:
     image: nginx:latest
     container_name: model-nginx
@@ -121,9 +202,9 @@ services:
     depends_on:
       - embed-1
       - embed-2
-      - embed-3
-      - embed-4
+      - embed-qwen-4b
+      - embed-qwen-vl
       - reranker-1
       - reranker-2
-      - reranker-3
-      - reranker-4
+      - reranker-qwen
+      - reranker-qwen-vl

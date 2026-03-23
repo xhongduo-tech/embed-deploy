@@ -1,8 +1,8 @@
-# 离线环境 10 节点向量化/重排序模型部署指南
+# 离线环境 8 节点向量化/重排序模型部署指南
 
 ## 📑 项目背景与环境说明
 
-本项目旨在为行内离线内网环境完整部署 10 节点向量化及重排序（Reranker）模型。由于物理机环境的特殊性，整个实施过程必须在严格的离线状态下进行。
+本项目旨在为行内离线内网环境完整部署 8 节点向量化及重排序（Reranker）模型。由于物理机环境的特殊性，整个实施过程必须在严格的离线状态下进行。
 
 **基础环境约束：**
 
@@ -14,26 +14,70 @@
 
 ## 🤗 模型下载（Hugging Face）
 
-本项目使用 BGE 系列向量化与重排序模型，模型文件较大（约 6GB+），**未纳入 Git 仓库**。请在有网环境从 Hugging Face 下载后放入 `Models/` 目录，再拷贝至离线环境。
+本项目使用 BGE 系列与 Qwen3 系列向量化与重排序模型，**模型文件未纳入 Git 仓库**，请在有网环境从 Hugging Face 下载后放入 `Models/` 目录，再拷贝至离线环境。
 
-| 模型 | 用途 | 下载方式 |
-|------|------|----------|
-| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 向量化（Embedding） | `huggingface-cli download BAAI/bge-m3 --local-dir Models/bge-m3` |
-| [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 重排序（Reranker） | `huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir Models/bge-reranker-v2-m3` |
+### 引擎与格式说明
 
-**或使用 Python 下载：**
+| 引擎 | 服务对象 | 模型格式 |
+|------|----------|----------|
+| **Infinity** | BGE-M3、BGE-Reranker-V2-M3 | HuggingFace 原始格式（safetensors） |
+| **llama.cpp** | 所有 Qwen3 模型 | GGUF 量化格式 |
 
-```python
-from huggingface_hub import snapshot_download
+> **关于 Qwen3-VL 系列**：名称中的"VL"表示支持多模态（视觉+文本）输入，但 `Qwen3-VL-Embedding-2B` 和 `Qwen3-VL-Reranker-2B` 本质上仍是标准的 Embedding/Reranker 模型，加载方式与纯文本 GGUF 完全一致，**不需要也没有 mmproj 文件**。
 
-# 向量化模型
-snapshot_download(repo_id="BAAI/bge-m3", local_dir="Models/bge-m3")
+### 模型清单
 
-# 重排序模型
-snapshot_download(repo_id="BAAI/bge-reranker-v2-m3", local_dir="Models/bge-reranker-v2-m3")
+| 模型 | 用途 | GPU | 格式 | 下载命令 |
+|------|------|-----|------|----------|
+| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 文本向量化 ×2 | GPU 0 | HF | `huggingface-cli download BAAI/bge-m3 --local-dir Models/bge-m3` |
+| [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) | 文本向量化 ×1 | GPU 0 | GGUF | `huggingface-cli download Qwen/Qwen3-Embedding-4B-GGUF --local-dir Models/qwen3-embedding-4b` |
+| [Qwen/Qwen3-VL-Embedding-2B](https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B) | 多模态向量化 ×1 | GPU 0 | GGUF | 见下方说明 |
+| [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 文本重排序 ×2 | GPU 1 | HF | `huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir Models/bge-reranker-v2-m3` |
+| [Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B) | 文本重排序 ×1 | GPU 1 | GGUF | 见下方说明 |
+| [Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) | 多模态重排序 ×1 | GPU 1 | GGUF | 见下方说明 |
+
+### BGE 系列（HF 格式，直接下载）
+
+```bash
+huggingface-cli download BAAI/bge-m3 --local-dir Models/bge-m3
+huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir Models/bge-reranker-v2-m3
 ```
 
-下载完成后，目录结构应为：`Models/bge-m3/`、`Models/bge-reranker-v2-m3/`。
+### Qwen3 系列（GGUF 格式）
+
+**Qwen3-Embedding-4B** 有官方 GGUF 仓库，直接下载：
+
+```bash
+# 下载所有量化版本（按需选择，推荐 Q4_K_M）
+huggingface-cli download Qwen/Qwen3-Embedding-4B-GGUF --local-dir Models/qwen3-embedding-4b
+```
+
+**Qwen3-VL-Embedding-2B、Qwen3-Reranker-0.6B、Qwen3-VL-Reranker-2B** 若无官方 GGUF 仓库，需先下载 HF 格式再转换：
+
+```bash
+# 1. 下载 HF 原始格式
+huggingface-cli download Qwen/Qwen3-VL-Embedding-2B  --local-dir Models/Qwen3-VL-Embedding-2B-hf
+huggingface-cli download Qwen/Qwen3-Reranker-0.6B    --local-dir Models/qwen3-reranker-0.6b-hf
+huggingface-cli download Qwen/Qwen3-VL-Reranker-2B   --local-dir Models/Qwen3-VL-Reranker-2B-hf
+
+# 2. 用 llama.cpp 转换脚本生成 GGUF（在有网环境执行）
+#    需要先克隆 llama.cpp：git clone https://github.com/ggerganov/llama.cpp
+pip install -r llama.cpp/requirements.txt
+
+python llama.cpp/convert_hf_to_gguf.py Models/Qwen3-VL-Embedding-2B-hf \
+    --outfile Models/Qwen3-VL-Embedding-2B/Qwen3-VL-Embedding-2B-Q4_K_M.gguf \
+    --outtype q4_k_m
+
+python llama.cpp/convert_hf_to_gguf.py Models/qwen3-reranker-0.6b-hf \
+    --outfile Models/qwen3-reranker-0.6b/Qwen3-Reranker-0.6B-Q4_K_M.gguf \
+    --outtype q4_k_m
+
+python llama.cpp/convert_hf_to_gguf.py Models/Qwen3-VL-Reranker-2B-hf \
+    --outfile Models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B-Q4_K_M.gguf \
+    --outtype q4_k_m
+```
+
+> **或**：在 HuggingFace Hub 上搜索社区已转换的 GGUF 版本（如 `bartowski/Qwen3-Reranker-0.6B-GGUF`），直接下载更省事。
 
 ---
 
@@ -291,69 +335,115 @@ sudo systemctl restart docker
 
 ## 🚀 第五阶段：Docker 镜像下载与推理服务部署
 
-本阶段将部署 **Infinity 推理引擎** 与 **Nginx 负载均衡**，构建 8 节点（4×Embedding + 4×Reranker）推理集群。
+本阶段采用**双引擎架构**，8 个节点按模型系列使用不同引擎：
 
-### 1. Infinity 引擎简介
+| 引擎 | 镜像来源 | 服务对象 | 选型原因 |
+|------|----------|----------|----------|
+| **Infinity** | Docker Hub | BGE-M3、BGE-Reranker-V2-M3 | 专为 BERT 系 Embedding/Reranker 深度优化，动态 Batching，高 QPS |
+| **llama.cpp** | GitHub Container Registry | 所有 Qwen3 模型 | 原生 GGUF 量化支持，Qwen3 架构完整适配，部署最稳定 |
 
-**Infinity**（[michaelfeil/infinity](https://github.com/michaelfeil/infinity)）是专为**高吞吐、低延迟的文本向量化（Embedding）和重排（Reranking）**设计的 AI 推理服务框架。可类比：在生成式 LLM 领域常用 vLLM 做推理加速；而在 RAG 的特征提取阶段，**Infinity 就是负责加速向量和重排模型的「vLLM」**。
+> **现有用户无感**：BGE 系列的 `/v1/embeddings`、`/v1/rerank` 路径完全不变；Qwen3 系列通过独立路径接入，两套引擎互不干扰。
+
+---
+
+### 1. 推理引擎简介
+
+#### Infinity（BGE 系列）
+
+**Infinity**（[michaelfeil/infinity](https://github.com/michaelfeil/infinity)）是专为高吞吐、低延迟的文本 Embedding 和 Reranking 设计的推理服务框架。
 
 | 特性 | 说明 |
 |------|------|
 | **动态批处理** | 高并发请求自动合并为大 Batch 送入 GPU，压榨 V100 并行算力 |
-| **专精检索模型** | 针对 BGE-M3 等 Embedding/Reranker 模型深度优化，高 QPS |
-| **OpenAI 兼容** | 暴露 `/v1/embeddings`、`/v1/rerank` 等标准路径，LangChain 等框架可直接对接 |
-| **多引擎支持** | 支持 PyTorch、ONNX、TensorRT，可进一步压缩延迟 |
+| **专精检索模型** | 针对 BGE-M3 等 BERT 系模型深度优化，高 QPS |
+| **OpenAI 兼容** | 暴露标准 `/v1/embeddings`、`/v1/rerank`，LangChain 等框架可直接对接 |
+
+#### llama.cpp（Qwen3 系列）
+
+**llama.cpp**（[ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)）是 C++ 实现的高效推理引擎，对 Qwen3 架构有完整原生支持。
+
+| 特性 | 说明 |
+|------|------|
+| **原生 GGUF** | 官方 GGUF 量化包无需任何转换即可直接加载 |
+| **Qwen3 全系支持** | 文本及 VL 系列 Embedding/Reranker 模型统一单文件加载，无额外依赖 |
+| **OpenAI 兼容** | Server 模式暴露 `/v1/embeddings`（`--embedding`）和 `/v1/rerank`（`--rerank`） |
+| **显存高效** | Q4_K_M 量化后显存占用低，与 BGE 模型共享同一 GPU 时余量充足 |
+
+---
 
 ### 2. 镜像下载（有网环境）
 
 在 **Mac** 上拉取时需指定 `--platform linux/amd64`，以生成适用于内网 Linux 服务器的镜像：
 
 ```bash
-# Infinity 推理引擎（约 9GB）
+# ── Infinity（BGE 系列引擎，约 9GB，Docker Hub）──────────────────────
 docker pull --platform linux/amd64 michaelf34/infinity:latest
 
-# Nginx 负载均衡
+# ── llama.cpp CUDA 版（Qwen3 系列引擎，约 6GB，GitHub Container Registry）──
+docker pull --platform linux/amd64 ghcr.io/ggerganov/llama.cpp:server-cuda
+
+# ── Nginx 负载均衡 ────────────────────────────────────────────────────
 docker pull --platform linux/amd64 nginx:latest
 ```
+
+> **注意**：`ghcr.io`（GitHub Container Registry）与 Docker Hub 是不同的镜像源，需分别拉取，各自导出 tar。
 
 ### 3. 导出为 .tar 文件（便于 U 盘拷贝）
 
 ```bash
-# 导出 Infinity
-docker save -o infinity_latest_amd64.tar michaelf34/infinity:latest
-
-# 导出 Nginx
-docker save -o nginx_latest_amd64.tar nginx:latest
+docker save -o infinity_latest_amd64.tar          michaelf34/infinity:latest
+docker save -o llamacpp_server_cuda_amd64.tar     ghcr.io/ggerganov/llama.cpp:server-cuda
+docker save -o nginx_latest_amd64.tar             nginx:latest
 ```
 
-将生成的 `infinity_latest_amd64.tar`、`nginx_latest_amd64.tar` 拷贝至 U 盘，导入内网服务器。
+将 3 个 `.tar` 文件拷贝至 U 盘。
 
 ### 4. 内网服务器导入镜像
 
 ```bash
-# 导入 Infinity
 docker load -i infinity_latest_amd64.tar
-
-# 导入 Nginx
+docker load -i llamacpp_server_cuda_amd64.tar
 docker load -i nginx_latest_amd64.tar
 ```
 
-### 5. 目录结构与启动
+验证导入：
 
-确保以下结构就绪：
+```bash
+docker images | grep -E "infinity|llama|nginx"
+```
+
+---
+
+### 5. 模型目录结构
+
+所有模型放入 `Models/` 目录，最终结构如下：
 
 ```
 embed-deploy/
 ├── Models/
-│   ├── bge-m3/              # 向量化模型（从 Hugging Face 下载）
-│   └── bge-reranker-v2-m3/  # 重排序模型（从 Hugging Face 下载）
+│   ├── bge-m3/                               # BGE 文本向量化（HF 格式，Infinity 加载）
+│   ├── bge-reranker-v2-m3/                   # BGE 文本重排序（HF 格式，Infinity 加载）
+│   ├── qwen3-embedding-4b/
+│   │   └── Qwen3-Embedding-4B-Q4_K_M.gguf   # Qwen3 文本向量化（单 GGUF，llama.cpp 加载）
+│   ├── Qwen3-VL-Embedding-2B/
+│   │   └── Qwen3-VL-Embedding-2B-Q4_K_M.gguf  # 多模态向量化（单 GGUF，llama.cpp 加载）
+│   ├── qwen3-reranker-0.6b/
+│   │   └── Qwen3-Reranker-0.6B-Q4_K_M.gguf  # Qwen3 文本重排序（单 GGUF，llama.cpp 加载）
+│   └── Qwen3-VL-Reranker-2B/
+│       └── Qwen3-VL-Reranker-2B-Q4_K_M.gguf   # 多模态重排序（单 GGUF，llama.cpp 加载）
 ├── web/
-│   └── index.html           # API 使用文档页端
+│   └── index.html
 ├── nginx/
-│   └── nginx.conf           # 负载均衡与静态页配置
+│   └── nginx.conf
 ├── docker-compose.yml
 └── README.md
 ```
+
+> ⚠️ **文件名确认**：`docker-compose.yml` 中 `--model` 参数的文件名必须与实际下载的 GGUF 文件名完全一致（量化版本如 `Q4_K_M`、`Q8_0` 因下载源不同而异）。若文件名不同，直接修改 `docker-compose.yml` 中对应行即可，其余配置无需改动。
+
+---
+
+### 6. 启动服务
 
 在项目根目录执行：
 
@@ -363,25 +453,77 @@ docker-compose up -d
 
 所有节点显示为绿色（Up）即表示启动成功。服务对外暴露端口 **8080**。
 
-### 6. 页端访问
-
-启动后，在浏览器访问 **http://\<服务器IP\>:8080/** 即可打开 **API 使用文档页**，提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等多种调用示例，支持一键复制。页端中的示例 URL 为 `http://api-embed.cs.icbc`，实际部署时请根据内网域名或 IP 替换。
-
-### 6. 验证与调用
+查看各节点状态：
 
 ```bash
-# 健康检查（Embedding）
+docker-compose ps
+```
+
+查看某节点启动日志（如排查 GGUF 文件名错误）：
+
+```bash
+docker logs embed-qwen-4b
+docker logs embed-qwen-vl
+docker logs reranker-qwen
+docker logs reranker-qwen-vl
+```
+
+---
+
+### 7. API 路由说明
+
+由于各节点运行不同模型，Nginx 通过 **URL 路径** 区分模型，内部转发至对应引擎：
+
+| 请求路径（对外） | 内部引擎 | 路由目标 | 对应模型 |
+|-----------------|----------|----------|----------|
+| `POST /v1/embeddings` | Infinity | bge_embed_pool（2 节点） | BGE-M3 |
+| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-4b | Qwen3-Embedding-4B |
+| `POST /v1/qwen-vl-embed` | llama.cpp | embed-qwen-vl | Qwen3-VL-Embedding-2B |
+| `POST /v1/rerank` | Infinity | bge_rerank_pool（2 节点） | BGE-Reranker-V2-M3 |
+| `POST /v1/qwen-rerank` | llama.cpp | reranker-qwen | Qwen3-Reranker-0.6B |
+| `POST /v1/qwen-vl-rerank` | llama.cpp | reranker-qwen-vl | Qwen3-VL-Reranker-2B |
+
+---
+
+### 8. 验证与调用
+
+```bash
+# BGE-M3 向量化（Infinity，旧接口不变）
 curl -X POST http://localhost:8080/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{"input": "测试文本", "model": "bge-m3"}'
 
-# 健康检查（Rerank）
+# Qwen3-Embedding-4B 向量化（llama.cpp）
+curl -X POST http://localhost:8080/v1/qwen-embed \
+  -H "Content-Type: application/json" \
+  -d '{"input": "测试文本", "model": "qwen3-embedding-4b"}'
+
+# Qwen3-VL-Embedding-2B 多模态向量化（llama.cpp）
+curl -X POST http://localhost:8080/v1/qwen-vl-embed \
+  -H "Content-Type: application/json" \
+  -d '{"input": "测试文本", "model": "Qwen3-VL-Embedding-2B"}'
+
+# BGE-Reranker 重排序（Infinity，旧接口不变）
 curl -X POST http://localhost:8080/v1/rerank \
   -H "Content-Type: application/json" \
   -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "bge-reranker-v2-m3"}'
+
+# Qwen3-Reranker-0.6B 重排序（llama.cpp）
+curl -X POST http://localhost:8080/v1/qwen-rerank \
+  -H "Content-Type: application/json" \
+  -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "qwen3-reranker-0.6b"}'
+
+# Qwen3-VL-Reranker-2B 多模态重排序（llama.cpp）
+curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
+  -H "Content-Type: application/json" \
+  -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "Qwen3-VL-Reranker-2B"}'
 ```
 
-> **注意：** 若使用离线导入的镜像，需确保 `docker-compose.yml` 中的 `image` 名称与 `docker load` 后的镜像名一致。若导入后镜像名为 `michaelf34/infinity:latest`，则无需修改。
+### 9. 页端访问
+
+启动后，在浏览器访问 **http://\<服务器IP\>:8080/** 即可打开 **API 使用文档页**，提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等多种调用示例，支持一键复制。页端中的示例 URL 为 `http://api-embed.cs.icbc`，实际部署时请根据内网域名或 IP 替换。
+
+> **注意：** 若使用离线导入的镜像，需确保 `docker-compose.yml` 中的 `image` 名称与 `docker load` 后的镜像名一致。
 
 ---
 
@@ -396,8 +538,12 @@ curl -X POST http://localhost:8080/v1/rerank \
 | 四 | GPU 透传可用 | `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi` |
 | 五 | 推理服务启动 | `docker-compose ps` 全部 Up |
 | 五 | 页端可访问 | 浏览器打开 `http://<IP>:8080/` |
-| 五 | Embedding 可用 | `curl -X POST http://localhost:8080/v1/embeddings ...` |
-| 五 | Rerank 可用 | `curl -X POST http://localhost:8080/v1/rerank ...` |
+| 五 | BGE Embedding 可用 | `curl -X POST http://localhost:8080/v1/embeddings ...` |
+| 五 | Qwen Embedding 可用 | `curl -X POST http://localhost:8080/v1/qwen-embed ...` |
+| 五 | Qwen VL Embedding 可用 | `curl -X POST http://localhost:8080/v1/qwen-vl-embed ...` |
+| 五 | BGE Rerank 可用 | `curl -X POST http://localhost:8080/v1/rerank ...` |
+| 五 | Qwen Rerank 可用 | `curl -X POST http://localhost:8080/v1/qwen-rerank ...` |
+| 五 | Qwen VL Rerank 可用 | `curl -X POST http://localhost:8080/v1/qwen-vl-rerank ...` |
 
 ---
 
@@ -409,9 +555,14 @@ curl -X POST http://localhost:8080/v1/rerank \
 
 | 类别 | 本地路径 | 资源 | 下载链接 |
 |------|----------|------|----------|
-| **模型** | `Models/bge-m3/` | BGE-M3 向量化模型 | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
-| **模型** | `Models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 重排序模型 | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
-| **镜像** | `Images/` | Infinity 推理引擎 | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
+| **模型** | `Models/bge-m3/` | BGE-M3 文本向量化（HF 格式） | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
+| **模型** | `Models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 文本重排序（HF 格式） | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
+| **模型** | `Models/qwen3-embedding-4b/` | Qwen3-Embedding-4B（GGUF） | [Hugging Face: Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) |
+| **模型** | `Models/Qwen3-VL-Embedding-2B/` | Qwen3-VL-Embedding-2B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-VL-Embedding-2B](https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B) |
+| **模型** | `Models/qwen3-reranker-0.6b/` | Qwen3-Reranker-0.6B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B) |
+| **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) |
+| **镜像** | `Images/` | Infinity 推理引擎（BGE 系列） | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
+| **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggerganov/llama.cpp:server-cuda` |
 | **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |
 | 一 | `Base/Kernel_Base/` | kernel / kernel-devel / kernel-headers | [麒麟 V10SP1.1 Packages](https://update.cs2c.com.cn/NS/V10/V10SP1.1/os/adv/lic/updates/x86_64/Packages/) |
 | 三 | `Base/` | NVIDIA-Linux-x86_64-550.163.01.run | [NVIDIA 数据中心驱动](https://www.nvidia.com/download/driverResults.aspx/243537/en-us/) |

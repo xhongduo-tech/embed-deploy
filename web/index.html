@@ -223,11 +223,16 @@
             </div>
 
             <div class="info-card">
-                <h2>推理引擎</h2>
-                <p>底层采用深度优化的 Infinity 高并发推理引擎，支持动态 Batching 与多卡协同。API 路由层已进行重写，完全兼容标准的 OpenAI 接口规范。<br><br>
-                <strong>挂载模型：</strong><br>
-                • <code>bge-m3</code> (向量化模型，输出 1024 维特征)<br>
-                • <code>bge-reranker-v2-m3</code> (语义重排模型)</p>
+                <h2>推理引擎（双引擎架构）</h2>
+                <p>采用双引擎策略保证最大可用性：BGE 系列由 <strong>Infinity</strong> 驱动（动态 Batching，高吞吐）；Qwen3 系列由 <strong>llama.cpp</strong> 驱动（原生 GGUF，单文件加载，无额外依赖）。两套引擎均暴露 OpenAI 兼容接口，通过 Nginx 路由统一入口。<br><br>
+                <strong>Embedding（GPU 0）</strong><br>
+                • <code>/v1/embeddings</code> → <code>bge-m3</code>（Infinity，×2 节点，旧接口保持不变）<br>
+                • <code>/v1/qwen-embed</code> → <code>qwen3-embedding-4b</code>（llama.cpp，GGUF）<br>
+                • <code>/v1/qwen-vl-embed</code> → <code>Qwen3-VL-Embedding-2B</code>（llama.cpp，多模态）<br><br>
+                <strong>Reranker（GPU 1）</strong><br>
+                • <code>/v1/rerank</code> → <code>bge-reranker-v2-m3</code>（Infinity，×2 节点，旧接口保持不变）<br>
+                • <code>/v1/qwen-rerank</code> → <code>qwen3-reranker-0.6b</code>（llama.cpp，GGUF）<br>
+                • <code>/v1/qwen-vl-rerank</code> → <code>Qwen3-VL-Reranker-2B</code>（llama.cpp，多模态）</p>
             </div>
         </div>
 
@@ -241,7 +246,7 @@
             </div>
 
             <div id="tab-curl" class="code-panel active">
-                <div class="section-title">1. Embedding (文本向量化)</div>
+                <div class="section-title">1. BGE-M3 Embedding（文本向量化，2节点负载均衡）</div>
                 <div class="code-wrapper">
                     <button class="copy-btn" onclick="copyCode(this)">复制</button>
 <pre>
@@ -254,7 +259,33 @@
 </pre>
                 </div>
 
-                <div class="section-title">2. Reranker (文档重排)</div>
+                <div class="section-title">2. Qwen3-Embedding-4B（文本向量化）</div>
+                <div class="code-wrapper">
+                    <button class="copy-btn" onclick="copyCode(this)">复制</button>
+<pre>
+<span class="c-keyword">curl</span> -X POST http://api-embed.cs.icbc/v1/qwen-embed \
+  -H <span class="c-string">"Content-Type: application/json"</span> \
+  -d <span class="c-string">'{
+    "model": "qwen3-embedding-4b",
+    "input": ["测试 Qwen3 文本向量化接口。"]
+  }'</span>
+</pre>
+                </div>
+
+                <div class="section-title">3. Qwen3-VL-Embedding-2B（多模态向量化）</div>
+                <div class="code-wrapper">
+                    <button class="copy-btn" onclick="copyCode(this)">复制</button>
+<pre>
+<span class="c-keyword">curl</span> -X POST http://api-embed.cs.icbc/v1/qwen-vl-embed \
+  -H <span class="c-string">"Content-Type: application/json"</span> \
+  -d <span class="c-string">'{
+    "model": "Qwen3-VL-Embedding-2B",
+    "input": ["测试 Qwen3 多模态向量化接口。"]
+  }'</span>
+</pre>
+                </div>
+
+                <div class="section-title">4. BGE-Reranker（文档重排，2节点负载均衡）</div>
                 <div class="code-wrapper">
                     <button class="copy-btn" onclick="copyCode(this)">复制</button>
 <pre>
@@ -267,29 +298,73 @@
   }'</span>
 </pre>
                 </div>
-            </div>
 
-            <div id="tab-requests" class="code-panel">
-                <div class="section-title">1. Embedding (文本向量化)</div>
+                <div class="section-title">5. Qwen3-Reranker-0.6B（文档重排）</div>
                 <div class="code-wrapper">
                     <button class="copy-btn" onclick="copyCode(this)">复制</button>
 <pre>
-<span class="c-keyword">import</span> requests
-
-res = requests.post(
-    <span class="c-string">"http://api-embed.cs.icbc/v1/embeddings"</span>,
-    json={<span class="c-string">"model"</span>: <span class="c-string">"bge-m3"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试原生 Requests 接入"</span>]}
-)
-<span class="c-func">print</span>(<span class="c-string">"向量数据:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+<span class="c-keyword">curl</span> -X POST http://api-embed.cs.icbc/v1/qwen-rerank \
+  -H <span class="c-string">"Content-Type: application/json"</span> \
+  -d <span class="c-string">'{
+    "model": "qwen3-reranker-0.6b",
+    "query": "如何调用接口？",
+    "documents": ["请通过统一的域名发起POST请求。", "今天天气不错。"]
+  }'</span>
 </pre>
                 </div>
 
-                <div class="section-title">2. Reranker (文档重排)</div>
+                <div class="section-title">6. Qwen3-VL-Reranker-2B（多模态重排）</div>
+                <div class="code-wrapper">
+                    <button class="copy-btn" onclick="copyCode(this)">复制</button>
+<pre>
+<span class="c-keyword">curl</span> -X POST http://api-embed.cs.icbc/v1/qwen-vl-rerank \
+  -H <span class="c-string">"Content-Type: application/json"</span> \
+  -d <span class="c-string">'{
+    "model": "Qwen3-VL-Reranker-2B",
+    "query": "如何调用接口？",
+    "documents": ["请通过统一的域名发起POST请求。", "今天天气不错。"]
+  }'</span>
+</pre>
+                </div>
+            </div>
+
+            <div id="tab-requests" class="code-panel">
+                <div class="section-title">Embedding（按模型选择接口路径）</div>
                 <div class="code-wrapper">
                     <button class="copy-btn" onclick="copyCode(this)">复制</button>
 <pre>
 <span class="c-keyword">import</span> requests
 
+<span class="c-comment"># BGE-M3（/v1/embeddings）</span>
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/embeddings"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"bge-m3"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 BGE 接入"</span>]}
+)
+<span class="c-func">print</span>(<span class="c-string">"BGE向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+
+<span class="c-comment"># Qwen3-Embedding-4B（/v1/qwen-embed）</span>
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-embed"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"qwen3-embedding-4b"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 Qwen3 接入"</span>]}
+)
+<span class="c-func">print</span>(<span class="c-string">"Qwen向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+
+<span class="c-comment"># Qwen3-VL-Embedding-2B（/v1/qwen-vl-embed）</span>
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-embed"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试多模态接入"</span>]}
+)
+<span class="c-func">print</span>(<span class="c-string">"VL向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+</pre>
+                </div>
+
+                <div class="section-title">Reranker（按模型选择接口路径）</div>
+                <div class="code-wrapper">
+                    <button class="copy-btn" onclick="copyCode(this)">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+<span class="c-comment"># BGE-Reranker（/v1/rerank）</span>
 res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>,
     json={
@@ -298,7 +373,18 @@ res = requests.post(
         <span class="c-string">"documents"</span>: [<span class="c-string">"统一域名访问模式很优雅。"</span>, <span class="c-string">"今天吃什么？"</span>]
     }
 )
-<span class="c-func">print</span>(<span class="c-string">"重排结果:"</span>, res.json())
+<span class="c-func">print</span>(<span class="c-string">"BGE重排:"</span>, res.json())
+
+<span class="c-comment"># Qwen3-Reranker-0.6B（/v1/qwen-rerank）</span>
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"qwen3-reranker-0.6b"</span>,
+        <span class="c-string">"query"</span>: <span class="c-string">"网关配置"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"统一域名访问模式很优雅。"</span>, <span class="c-string">"今天吃什么？"</span>]
+    }
+)
+<span class="c-func">print</span>(<span class="c-string">"Qwen重排:"</span>, res.json())
 </pre>
                 </div>
             </div>
@@ -323,17 +409,18 @@ response = client.embeddings.create(
 </pre>
                 </div>
 
-                <div class="section-title">2. Reranker (由于 OpenAI 无原生重排接口，需用 Requests)</div>
+                <div class="section-title">2. Reranker (OpenAI 无原生重排接口，用 Requests；路径对应模型)</div>
                 <div class="code-wrapper">
                     <button class="copy-btn" onclick="copyCode(this)">复制</button>
 <pre>
 <span class="c-keyword">import</span> requests
 
+<span class="c-comment"># BGE-Reranker → /v1/rerank</span>
 res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"bge-reranker-v2-m3"</span>,
-        <span class="c-string">"query"</span>: <span class="c-string">"接口调用"</span>, 
+        <span class="c-string">"query"</span>: <span class="c-string">"接口调用"</span>,
         <span class="c-string">"documents"</span>: [<span class="c-string">"推荐使用 OpenAI SDK 接入。"</span>]
     }
 )
@@ -363,13 +450,27 @@ res = requests.post(
   <span class="c-func">console</span>.log(response.data[0].embedding);
 }
 
-<span class="c-comment">// 2. 重排调用 (使用原生 Fetch 发起 POST 请求)</span>
+<span class="c-comment">// 2. BGE 重排（/v1/rerank）</span>
 <span class="c-keyword">async function</span> <span class="c-func">rerankDocs</span>() {
   <span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>, {
     method: <span class="c-string">"POST"</span>,
     headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
     body: JSON.stringify({
       model: <span class="c-string">"bge-reranker-v2-m3"</span>,
+      query: <span class="c-string">"API网关配置"</span>,
+      documents: [<span class="c-string">"统一域名访问模式非常优雅。"</span>, <span class="c-string">"今天吃什么？"</span>]
+    })
+  });
+  <span class="c-func">console</span>.log(<span class="c-keyword">await</span> res.json());
+}
+
+<span class="c-comment">// 3. Qwen3-Reranker（/v1/qwen-rerank）</span>
+<span class="c-keyword">async function</span> <span class="c-func">qwenRerank</span>() {
+  <span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">"http://api-embed.cs.icbc/v1/qwen-rerank"</span>, {
+    method: <span class="c-string">"POST"</span>,
+    headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
+    body: JSON.stringify({
+      model: <span class="c-string">"qwen3-reranker-0.6b"</span>,
       query: <span class="c-string">"API网关配置"</span>,
       documents: [<span class="c-string">"统一域名访问模式非常优雅。"</span>, <span class="c-string">"今天吃什么？"</span>]
     })
