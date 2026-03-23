@@ -1,6 +1,6 @@
 # 8 节点向量化/重排序推理服务（双引擎架构）
 # ┌─ BGE 系列  → Infinity 引擎（保持原有路径，现有用户无感）
-# └─ Qwen3 系列 → llama.cpp 引擎（原生 GGUF，单文件加载）
+# └─ Qwen3 系列 → llama.cpp 引擎（原生 GGUF；VL 模型另需 --mmproj 多模态投影）
 #
 # GPU 分配：
 #   GPU 0 → embed-1 / embed-2 / embed-qwen-8b / embed-qwen-vl   (~8.2 GB / 16 GB)
@@ -85,7 +85,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
 
-  # 多模态向量化：Qwen3-VL-Embedding-2B（社区 GGUF，DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF）
+  # 多模态向量化：Qwen3-VL-Embedding-2B（主 GGUF + mmproj，DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF）
   # 注意文件名前缀为 "Qwen." —— DevQuasar 仓库命名规范
   embed-qwen-vl:
     <<: *llamacpp-base
@@ -93,6 +93,8 @@ services:
     command:
       - "--model"
       - "/models/Qwen3-VL-Embedding-2B/Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf"
+      - "--mmproj"
+      - "/models/Qwen3-VL-Embedding-2B/mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
@@ -165,14 +167,15 @@ services:
               device_ids: ['1']
               capabilities: [gpu]
 
-  # 多模态重排：Qwen3-VL-Reranker-2B（无官方/社区 GGUF，需自行从 HF 格式转换）
-  # 转换后文件名见 README 第五阶段说明
+  # 多模态重排：Qwen3-VL-Reranker-2B（主 GGUF + mmproj，mradermacher/Qwen3-VL-Reranker-2B-GGUF）
   reranker-qwen-vl:
     <<: *llamacpp-base
     container_name: reranker-qwen-vl
     command:
       - "--model"
       - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B.Q4_K_M.gguf"
+      - "--mmproj"
+      - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B.mmproj-f16.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"

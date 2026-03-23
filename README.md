@@ -23,7 +23,7 @@
 | **Infinity** | BGE-M3、BGE-Reranker-V2-M3 | HuggingFace 原始格式（safetensors） |
 | **llama.cpp** | 所有 Qwen3 模型 | GGUF 量化格式 |
 
-> **关于 Qwen3-VL 系列**：名称中的"VL"表示支持多模态（视觉+文本）输入。`Qwen3-VL-Embedding-2B` 加载为单一 GGUF 文件，无需 mmproj。`Qwen3-VL-Reranker-2B` 的社区 GGUF 仓库（mradermacher）提供了 mmproj 文件，但本方案仅用于文本重排序，**不需要加载 mmproj**，直接加载主 GGUF 即可。
+> **关于 Qwen3-VL 系列**：名称中的"VL"表示支持多模态（视觉+文本）输入。`Qwen3-VL-Embedding-2B` 与 `Qwen3-VL-Reranker-2B` 在 llama.cpp 中均需 **主模型 GGUF + mmproj（多模态投影）** 一并加载，图像/图文输入才能走视觉分支；`docker-compose.yml` 已对两个 VL 服务配置 `--mmproj`。若仅下载主 GGUF、缺少同目录下的 mmproj 文件，容器启动会失败。
 
 ### 模型选型与 VRAM 评估
 
@@ -33,12 +33,12 @@
 |-----|------|------|------|
 | GPU 0 | embed-1 / embed-2 | BGE-M3 ×2（Infinity） | ~2.4 GB |
 | GPU 0 | embed-qwen-8b | Qwen3-Embedding-8B Q4_K_M | 4.68 GB |
-| GPU 0 | embed-qwen-vl | Qwen3-VL-Embedding-2B Q4_K_M | 1.11 GB |
-| **GPU 0 合计** | | | **~8.2 GB / 16 GB** |
+| GPU 0 | embed-qwen-vl | Qwen3-VL-Embedding-2B Q4_K_M + mmproj F16 | ~1.9 GB |
+| **GPU 0 合计** | | | **~9.0 GB / 16 GB** |
 | GPU 1 | reranker-1 / reranker-2 | BGE-Reranker-V2-M3 ×2（Infinity） | ~1.2 GB |
 | GPU 1 | reranker-qwen | Qwen3-Reranker-8B Q4_K_M | 5.03 GB |
-| GPU 1 | reranker-qwen-vl | Qwen3-VL-Reranker-2B Q4_K_M | ~1.2 GB |
-| **GPU 1 合计** | | | **~7.3 GB / 16 GB** |
+| GPU 1 | reranker-qwen-vl | Qwen3-VL-Reranker-2B Q4_K_M + mmproj F16 | ~2.0 GB |
+| **GPU 1 合计** | | | **~8.2 GB / 16 GB** |
 
 > 两卡各有约 50% 显存余量，选用最大规格的文本 Embedding 和 Reranker 完全可行。
 
@@ -75,6 +75,7 @@ huggingface-cli download Qwen/Qwen3-Embedding-8B-GGUF \
 # DevQuasar 仓库命名规范：文件名以 "Qwen." 开头
 huggingface-cli download DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF \
     --include "Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf" \
+    --include "mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf" \
     --local-dir Models/Qwen3-VL-Embedding-2B
 ```
 
@@ -92,10 +93,11 @@ huggingface-cli download QuantFactory/Qwen3-Reranker-8B-GGUF \
 # mradermacher 社区 GGUF，文件名格式：Qwen3-VL-Reranker-2B.Q4_K_M.gguf
 huggingface-cli download mradermacher/Qwen3-VL-Reranker-2B-GGUF \
     --include "Qwen3-VL-Reranker-2B.Q4_K_M.gguf" \
+    --include "Qwen3-VL-Reranker-2B.mmproj-f16.gguf" \
     --local-dir Models/Qwen3-VL-Reranker-2B
 ```
 
-> 💡 该仓库同时提供 mmproj 文件（用于图像输入），本方案仅做文本重排序，**无需下载 mmproj**，只下载主 GGUF 文件即可。
+> 💡 多模态能力依赖 mmproj：仓库还提供 `Qwen3-VL-Reranker-2B.mmproj-Q8_0.gguf`（体积更小）。若改用 Q8_0，请将 `docker-compose.yml` 中 `reranker-qwen-vl` 的 `--mmproj` 路径改为对应文件名。
 
 ---
 
@@ -384,7 +386,7 @@ sudo systemctl restart docker
 |------|------|
 | **原生 GGUF** | llama.cpp 只支持 GGUF 格式，这是引擎的硬性要求，非量化选择 |
 | **量化可选** | `F16` GGUF 零精度损失；`Q4_K_M` 约占原模型 25% 显存，按实际显存余量选择 |
-| **Qwen3 全系支持** | 文本及 VL 系列 Embedding/Reranker 模型统一单文件加载，无额外依赖 |
+| **Qwen3 全系支持** | 文本模型单 GGUF；VL Embedding / VL Reranker 需主 GGUF + mmproj（与 `docker-compose.yml` 一致） |
 | **OpenAI 兼容** | Server 模式暴露 `/v1/embeddings`（`--embedding`）和 `/v1/rerank`（`--rerank`） |
 
 ---
@@ -444,11 +446,13 @@ embed-deploy/
 │   ├── qwen3-embedding-8b/
 │   │   └── model-Q4_K_M.gguf                # Qwen3 文本向量化 8B（官方 GGUF，llama.cpp 加载）
 │   ├── Qwen3-VL-Embedding-2B/
-│   │   └── Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf  # 多模态向量化（社区 GGUF，注意文件名前缀）
+│   │   ├── Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf   # 主模型（社区 GGUF，注意文件名前缀）
+│   │   └── mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf  # 多模态投影（与主模型配套）
 │   ├── qwen3-reranker-8b/
 │   │   └── Qwen3-Reranker-8B-Q4_K_M.gguf   # Qwen3 文本重排序 8B（社区 GGUF，llama.cpp 加载）
 │   └── Qwen3-VL-Reranker-2B/
-│       └── Qwen3-VL-Reranker-2B.Q4_K_M.gguf   # 多模态重排序（社区 GGUF，mradermacher）
+│       ├── Qwen3-VL-Reranker-2B.Q4_K_M.gguf    # 主模型（社区 GGUF，mradermacher）
+│       └── Qwen3-VL-Reranker-2B.mmproj-f16.gguf  # 多模态投影（与主模型配套）
 ├── web/
 │   └── index.html
 ├── nginx/
@@ -457,7 +461,7 @@ embed-deploy/
 └── README.md
 ```
 
-> ⚠️ **文件名确认**：`docker-compose.yml` 中 `--model` 参数的文件名必须与实际下载的 GGUF 文件名完全一致（量化版本如 `Q4_K_M`、`Q8_0` 因下载源不同而异）。若文件名不同，直接修改 `docker-compose.yml` 中对应行即可，其余配置无需改动。
+> ⚠️ **文件名确认**：`docker-compose.yml` 中 `--model` 与 VL 服务的 `--mmproj` 路径必须与实际文件名一致（量化版本如 `Q4_K_M`、`Q8_0` 因下载源不同而异）。若文件名不同，直接修改 `docker-compose.yml` 中对应行即可，其余配置无需改动。
 
 ---
 
@@ -480,7 +484,7 @@ docker-compose ps
 查看某节点启动日志（如排查 GGUF 文件名错误）：
 
 ```bash
-docker logs embed-qwen-4b
+docker logs embed-qwen-8b
 docker logs embed-qwen-vl
 docker logs reranker-qwen
 docker logs reranker-qwen-vl
