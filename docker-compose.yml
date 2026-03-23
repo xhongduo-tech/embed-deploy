@@ -1,12 +1,16 @@
 # 8 节点向量化/重排序推理服务（双引擎架构）
 # ┌─ BGE 系列  → Infinity 引擎（保持原有路径，现有用户无感）
-# └─ Qwen 系列 → llama.cpp 引擎（原生 GGUF 支持，兼容 VL 多模态）
+# └─ Qwen3 系列 → llama.cpp 引擎（原生 GGUF，单文件加载）
 #
 # GPU 分配：
-#   GPU 0 → embed-1 / embed-2 / embed-qwen-4b / embed-qwen-vl
-#   GPU 1 → reranker-1 / reranker-2 / reranker-qwen / reranker-qwen-vl
+#   GPU 0 → embed-1 / embed-2 / embed-qwen-8b / embed-qwen-vl   (~8.2 GB / 16 GB)
+#   GPU 1 → reranker-1 / reranker-2 / reranker-qwen / reranker-qwen-vl  (~7.3 GB / 16 GB)
 #
-# 前置条件：Models/ 目录已放置所有对应模型（BGE 为 HF 格式，Qwen 为 GGUF 格式）
+# Qwen3 模型选型：
+#   文本 Embedding  → Qwen3-Embedding-8B   Q4_K_M  4.68 GB  官方 GGUF
+#   VL Embedding    → Qwen3-VL-Embedding-2B Q4_K_M  1.11 GB  社区 GGUF
+#   文本 Reranker   → Qwen3-Reranker-8B    Q4_K_M  5.03 GB  社区 GGUF
+#   VL Reranker     → Qwen3-VL-Reranker-2B Q4_K_M  ~1.1 GB  需自行转换
 
 version: '3.8'
 
@@ -17,7 +21,7 @@ x-infinity-base: &infinity-base
     - ./Models:/models
   ipc: host
 
-# ── Qwen 服务公共底座（llama.cpp CUDA 引擎）──────────────────────────
+# ── Qwen3 服务公共底座（llama.cpp CUDA 引擎）──────────────────────────
 x-llamacpp-base: &llamacpp-base
   image: ghcr.io/ggml-org/llama.cpp:server-cuda
   volumes:
@@ -53,26 +57,26 @@ services:
               capabilities: [gpu]
 
   # ═══════════════════════════════════════════════════════════════════
-  # Qwen Embedding（llama.cpp，GPU 0）—— 路径 /v1/qwen-embed 等
+  # Qwen3 Embedding（llama.cpp，GPU 0）
   # ═══════════════════════════════════════════════════════════════════
 
-  # 纯文本向量化：Qwen3-Embedding-4B（GGUF）
-  # ⚠ 将下方 *.gguf 文件名替换为实际下载的量化版本，推荐 Q4_K_M
-  embed-qwen-4b:
+  # 文本向量化：Qwen3-Embedding-8B（官方 GGUF，Qwen/Qwen3-Embedding-8B-GGUF）
+  # 文件名固定为 model-Q4_K_M.gguf（官方仓库命名规范）
+  embed-qwen-8b:
     <<: *llamacpp-base
-    container_name: embed-qwen-4b
+    container_name: embed-qwen-8b
     command:
       - "--model"
-      - "/models/qwen3-embedding-4b/Qwen3-Embedding-4B-Q4_K_M.gguf"
+      - "/models/qwen3-embedding-8b/model-Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "8000"
-      - "--embedding"       # 启用 embedding 模式，暴露 /v1/embeddings
+      - "--embedding"
       - "--ctx-size"
       - "4096"
       - "-ngl"
-      - "99"                # 全部层卸载到 GPU
+      - "99"
     deploy:
       resources:
         reservations:
@@ -81,15 +85,14 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
 
-  # 多模态向量化：Qwen3-VL-Embedding-2B（GGUF，单文件，无 mmproj）
-  # "VL" 表示支持多模态输入，但本质是 Embedding 模型，加载方式与纯文本 GGUF 完全相同
-  # ⚠ 将文件名替换为实际下载的 GGUF 量化版本
+  # 多模态向量化：Qwen3-VL-Embedding-2B（社区 GGUF，DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF）
+  # 注意文件名前缀为 "Qwen." —— DevQuasar 仓库命名规范
   embed-qwen-vl:
     <<: *llamacpp-base
     container_name: embed-qwen-vl
     command:
       - "--model"
-      - "/models/Qwen3-VL-Embedding-2B/Qwen3-VL-Embedding-2B-Q4_K_M.gguf"
+      - "/models/Qwen3-VL-Embedding-2B/Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
@@ -135,21 +138,21 @@ services:
               capabilities: [gpu]
 
   # ═══════════════════════════════════════════════════════════════════
-  # Qwen Reranker（llama.cpp，GPU 1）—— 路径 /v1/qwen-rerank 等
+  # Qwen3 Reranker（llama.cpp，GPU 1）
   # ═══════════════════════════════════════════════════════════════════
 
-  # 纯文本重排：Qwen3-Reranker-0.6B（GGUF）
+  # 文本重排：Qwen3-Reranker-8B（社区 GGUF，QuantFactory/Qwen3-Reranker-8B-GGUF）
   reranker-qwen:
     <<: *llamacpp-base
     container_name: reranker-qwen
     command:
       - "--model"
-      - "/models/qwen3-reranker-0.6b/Qwen3-Reranker-0.6B-Q4_K_M.gguf"
+      - "/models/qwen3-reranker-8b/Qwen3-Reranker-8B-Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "8000"
-      - "--rerank"          # 启用 rerank 模式，暴露 /v1/rerank
+      - "--rerank"
       - "--ctx-size"
       - "4096"
       - "-ngl"
@@ -162,9 +165,8 @@ services:
               device_ids: ['1']
               capabilities: [gpu]
 
-  # 多模态重排：Qwen3-VL-Reranker-2B（GGUF，单文件，无 mmproj）
-  # 同 VL-Embedding：本质是 Reranker 模型，单 GGUF 文件即可加载
-  # ⚠ 将文件名替换为实际下载的 GGUF 量化版本
+  # 多模态重排：Qwen3-VL-Reranker-2B（无官方/社区 GGUF，需自行从 HF 格式转换）
+  # 转换后文件名见 README 第五阶段说明
   reranker-qwen-vl:
     <<: *llamacpp-base
     container_name: reranker-qwen-vl
@@ -202,7 +204,7 @@ services:
     depends_on:
       - embed-1
       - embed-2
-      - embed-qwen-4b
+      - embed-qwen-8b
       - embed-qwen-vl
       - reranker-1
       - reranker-2

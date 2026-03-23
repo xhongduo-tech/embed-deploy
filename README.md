@@ -25,59 +25,85 @@
 
 > **关于 Qwen3-VL 系列**：名称中的"VL"表示支持多模态（视觉+文本）输入，但 `Qwen3-VL-Embedding-2B` 和 `Qwen3-VL-Reranker-2B` 本质上仍是标准的 Embedding/Reranker 模型，加载方式与纯文本 GGUF 完全一致，**不需要也没有 mmproj 文件**。
 
-### 模型清单
+### 模型选型与 VRAM 评估
 
-| 模型 | 用途 | GPU | 格式 | 下载命令 |
-|------|------|-----|------|----------|
-| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 文本向量化 ×2 | GPU 0 | HF | `huggingface-cli download BAAI/bge-m3 --local-dir Models/bge-m3` |
-| [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) | 文本向量化 ×1 | GPU 0 | GGUF | `huggingface-cli download Qwen/Qwen3-Embedding-4B-GGUF --local-dir Models/qwen3-embedding-4b` |
-| [Qwen/Qwen3-VL-Embedding-2B](https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B) | 多模态向量化 ×1 | GPU 0 | GGUF | 见下方说明 |
-| [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 文本重排序 ×2 | GPU 1 | HF | `huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir Models/bge-reranker-v2-m3` |
-| [Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B) | 文本重排序 ×1 | GPU 1 | GGUF | 见下方说明 |
-| [Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) | 多模态重排序 ×1 | GPU 1 | GGUF | 见下方说明 |
+基于 V100 16GB 显存，各节点实际占用如下：
+
+| GPU | 容器 | 模型 | VRAM |
+|-----|------|------|------|
+| GPU 0 | embed-1 / embed-2 | BGE-M3 ×2（Infinity） | ~2.4 GB |
+| GPU 0 | embed-qwen-8b | Qwen3-Embedding-8B Q4_K_M | 4.68 GB |
+| GPU 0 | embed-qwen-vl | Qwen3-VL-Embedding-2B Q4_K_M | 1.11 GB |
+| **GPU 0 合计** | | | **~8.2 GB / 16 GB** |
+| GPU 1 | reranker-1 / reranker-2 | BGE-Reranker-V2-M3 ×2（Infinity） | ~1.2 GB |
+| GPU 1 | reranker-qwen | Qwen3-Reranker-8B Q4_K_M | 5.03 GB |
+| GPU 1 | reranker-qwen-vl | Qwen3-VL-Reranker-2B Q4_K_M | ~1.1 GB |
+| **GPU 1 合计** | | | **~7.3 GB / 16 GB** |
+
+> 两卡各有约 50% 显存余量，选用最大规格的文本 Embedding 和 Reranker 完全可行。
+
+### 模型清单与下载命令
+
+| 模型 | 用途 | GGUF 来源 | HuggingFace 仓库 |
+|------|------|-----------|-----------------|
+| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 文本向量化 ×2（HF 格式） | — | 官方 |
+| [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) | 文本向量化 ×1 | **官方** GGUF | 官方 |
+| [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) | 多模态向量化 ×1 | 社区 GGUF | 社区 |
+| [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 文本重排序 ×2（HF 格式） | — | 官方 |
+| [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) | 文本重排序 ×1 | 社区 GGUF | 社区 |
+| [Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) | 多模态重排序 ×1（需转换） | 暂无 GGUF | 官方 HF 格式 |
 
 ### BGE 系列（HF 格式，直接下载）
 
 ```bash
-huggingface-cli download BAAI/bge-m3 --local-dir Models/bge-m3
-huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir Models/bge-reranker-v2-m3
+huggingface-cli download BAAI/bge-m3              --local-dir Models/bge-m3
+huggingface-cli download BAAI/bge-reranker-v2-m3  --local-dir Models/bge-reranker-v2-m3
 ```
 
-### Qwen3 系列（GGUF 格式）
-
-**Qwen3-Embedding-4B** 有官方 GGUF 仓库，直接下载：
+### Qwen3-Embedding-8B（官方 GGUF，直接下载）
 
 ```bash
-# 下载所有量化版本（按需选择，推荐 Q4_K_M）
-huggingface-cli download Qwen/Qwen3-Embedding-4B-GGUF --local-dir Models/qwen3-embedding-4b
+# 官方仓库文件名固定为 model-Q4_K_M.gguf
+huggingface-cli download Qwen/Qwen3-Embedding-8B-GGUF \
+    --include "model-Q4_K_M.gguf" \
+    --local-dir Models/qwen3-embedding-8b
 ```
 
-**Qwen3-VL-Embedding-2B、Qwen3-Reranker-0.6B、Qwen3-VL-Reranker-2B** 若无官方 GGUF 仓库，需先下载 HF 格式再转换：
+### Qwen3-VL-Embedding-2B（社区 GGUF，直接下载）
 
 ```bash
-# 1. 下载 HF 原始格式
-huggingface-cli download Qwen/Qwen3-VL-Embedding-2B  --local-dir Models/Qwen3-VL-Embedding-2B-hf
-huggingface-cli download Qwen/Qwen3-Reranker-0.6B    --local-dir Models/qwen3-reranker-0.6b-hf
-huggingface-cli download Qwen/Qwen3-VL-Reranker-2B   --local-dir Models/Qwen3-VL-Reranker-2B-hf
+# DevQuasar 仓库命名规范：文件名以 "Qwen." 开头
+huggingface-cli download DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF \
+    --include "Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf" \
+    --local-dir Models/Qwen3-VL-Embedding-2B
+```
 
-# 2. 用 llama.cpp 转换脚本生成 GGUF（在有网环境执行）
-#    需要先克隆 llama.cpp：git clone https://github.com/ggerganov/llama.cpp
+### Qwen3-Reranker-8B（社区 GGUF，直接下载）
+
+```bash
+huggingface-cli download QuantFactory/Qwen3-Reranker-8B-GGUF \
+    --include "Qwen3-Reranker-8B-Q4_K_M.gguf" \
+    --local-dir Models/qwen3-reranker-8b
+```
+
+### Qwen3-VL-Reranker-2B（暂无 GGUF，需自行转换）
+
+```bash
+# 第一步：下载 HF 原始格式
+huggingface-cli download Qwen/Qwen3-VL-Reranker-2B \
+    --local-dir Models/Qwen3-VL-Reranker-2B-hf
+
+# 第二步：克隆 llama.cpp 并安装依赖（有网环境）
+git clone https://github.com/ggml-org/llama.cpp
 pip install -r llama.cpp/requirements.txt
 
-python llama.cpp/convert_hf_to_gguf.py Models/Qwen3-VL-Embedding-2B-hf \
-    --outfile Models/Qwen3-VL-Embedding-2B/Qwen3-VL-Embedding-2B-Q4_K_M.gguf \
-    --outtype q4_k_m
-
-python llama.cpp/convert_hf_to_gguf.py Models/qwen3-reranker-0.6b-hf \
-    --outfile Models/qwen3-reranker-0.6b/Qwen3-Reranker-0.6B-Q4_K_M.gguf \
-    --outtype q4_k_m
-
+# 第三步：转换为 Q4_K_M GGUF
 python llama.cpp/convert_hf_to_gguf.py Models/Qwen3-VL-Reranker-2B-hf \
     --outfile Models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B-Q4_K_M.gguf \
     --outtype q4_k_m
 ```
 
-> **或**：在 HuggingFace Hub 上搜索社区已转换的 GGUF 版本（如 `bartowski/Qwen3-Reranker-0.6B-GGUF`），直接下载更省事。
+> 💡 也可持续关注 HuggingFace Hub，当社区发布 Qwen3-VL-Reranker-2B 的 GGUF 版本后，直接下载替换即可，无需改动 `docker-compose.yml`。
 
 ---
 
@@ -423,14 +449,14 @@ embed-deploy/
 ├── Models/
 │   ├── bge-m3/                               # BGE 文本向量化（HF 格式，Infinity 加载）
 │   ├── bge-reranker-v2-m3/                   # BGE 文本重排序（HF 格式，Infinity 加载）
-│   ├── qwen3-embedding-4b/
-│   │   └── Qwen3-Embedding-4B-Q4_K_M.gguf   # Qwen3 文本向量化（单 GGUF，llama.cpp 加载）
+│   ├── qwen3-embedding-8b/
+│   │   └── model-Q4_K_M.gguf                # Qwen3 文本向量化 8B（官方 GGUF，llama.cpp 加载）
 │   ├── Qwen3-VL-Embedding-2B/
-│   │   └── Qwen3-VL-Embedding-2B-Q4_K_M.gguf  # 多模态向量化（单 GGUF，llama.cpp 加载）
-│   ├── qwen3-reranker-0.6b/
-│   │   └── Qwen3-Reranker-0.6B-Q4_K_M.gguf  # Qwen3 文本重排序（单 GGUF，llama.cpp 加载）
+│   │   └── Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf  # 多模态向量化（社区 GGUF，注意文件名前缀）
+│   ├── qwen3-reranker-8b/
+│   │   └── Qwen3-Reranker-8B-Q4_K_M.gguf   # Qwen3 文本重排序 8B（社区 GGUF，llama.cpp 加载）
 │   └── Qwen3-VL-Reranker-2B/
-│       └── Qwen3-VL-Reranker-2B-Q4_K_M.gguf   # 多模态重排序（单 GGUF，llama.cpp 加载）
+│       └── Qwen3-VL-Reranker-2B-Q4_K_M.gguf  # 多模态重排序（需自行转换）
 ├── web/
 │   └── index.html
 ├── nginx/
@@ -477,10 +503,10 @@ docker logs reranker-qwen-vl
 | 请求路径（对外） | 内部引擎 | 路由目标 | 对应模型 |
 |-----------------|----------|----------|----------|
 | `POST /v1/embeddings` | Infinity | bge_embed_pool（2 节点） | BGE-M3 |
-| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-4b | Qwen3-Embedding-4B |
+| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-8b | Qwen3-Embedding-8B |
 | `POST /v1/qwen-vl-embed` | llama.cpp | embed-qwen-vl | Qwen3-VL-Embedding-2B |
 | `POST /v1/rerank` | Infinity | bge_rerank_pool（2 节点） | BGE-Reranker-V2-M3 |
-| `POST /v1/qwen-rerank` | llama.cpp | reranker-qwen | Qwen3-Reranker-0.6B |
+| `POST /v1/qwen-rerank` | llama.cpp | reranker-qwen | Qwen3-Reranker-8B |
 | `POST /v1/qwen-vl-rerank` | llama.cpp | reranker-qwen-vl | Qwen3-VL-Reranker-2B |
 
 ---
@@ -496,7 +522,7 @@ curl -X POST http://localhost:8080/v1/embeddings \
 # Qwen3-Embedding-4B 向量化（llama.cpp）
 curl -X POST http://localhost:8080/v1/qwen-embed \
   -H "Content-Type: application/json" \
-  -d '{"input": "测试文本", "model": "qwen3-embedding-4b"}'
+  -d '{"input": "测试文本", "model": "qwen3-embedding-8b"}'
 
 # Qwen3-VL-Embedding-2B 多模态向量化（llama.cpp）
 curl -X POST http://localhost:8080/v1/qwen-vl-embed \
@@ -557,10 +583,10 @@ curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
 |------|----------|------|----------|
 | **模型** | `Models/bge-m3/` | BGE-M3 文本向量化（HF 格式） | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
 | **模型** | `Models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 文本重排序（HF 格式） | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
-| **模型** | `Models/qwen3-embedding-4b/` | Qwen3-Embedding-4B（GGUF） | [Hugging Face: Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) |
-| **模型** | `Models/Qwen3-VL-Embedding-2B/` | Qwen3-VL-Embedding-2B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-VL-Embedding-2B](https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B) |
-| **模型** | `Models/qwen3-reranker-0.6b/` | Qwen3-Reranker-0.6B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B) |
-| **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) |
+| **模型** | `Models/qwen3-embedding-8b/` | Qwen3-Embedding-8B（官方 GGUF） | [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) |
+| **模型** | `Models/Qwen3-VL-Embedding-2B/` | Qwen3-VL-Embedding-2B（社区 GGUF） | [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) |
+| **模型** | `Models/qwen3-reranker-8b/` | Qwen3-Reranker-8B（社区 GGUF） | [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) |
+| **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（需自行转换） | [Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) |
 | **镜像** | `Images/` | Infinity 推理引擎（BGE 系列） | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
 | **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggml-org/llama.cpp:server-cuda` |
 | **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |
