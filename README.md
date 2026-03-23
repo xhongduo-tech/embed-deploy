@@ -23,7 +23,7 @@
 | **Infinity** | BGE-M3、BGE-Reranker-V2-M3 | HuggingFace 原始格式（safetensors） |
 | **llama.cpp** | 所有 Qwen3 模型 | GGUF 量化格式 |
 
-> **关于 Qwen3-VL 系列**：名称中的"VL"表示支持多模态（视觉+文本）输入，但 `Qwen3-VL-Embedding-2B` 和 `Qwen3-VL-Reranker-2B` 本质上仍是标准的 Embedding/Reranker 模型，加载方式与纯文本 GGUF 完全一致，**不需要也没有 mmproj 文件**。
+> **关于 Qwen3-VL 系列**：名称中的"VL"表示支持多模态（视觉+文本）输入。`Qwen3-VL-Embedding-2B` 加载为单一 GGUF 文件，无需 mmproj。`Qwen3-VL-Reranker-2B` 的社区 GGUF 仓库（mradermacher）提供了 mmproj 文件，但本方案仅用于文本重排序，**不需要加载 mmproj**，直接加载主 GGUF 即可。
 
 ### 模型选型与 VRAM 评估
 
@@ -37,7 +37,7 @@
 | **GPU 0 合计** | | | **~8.2 GB / 16 GB** |
 | GPU 1 | reranker-1 / reranker-2 | BGE-Reranker-V2-M3 ×2（Infinity） | ~1.2 GB |
 | GPU 1 | reranker-qwen | Qwen3-Reranker-8B Q4_K_M | 5.03 GB |
-| GPU 1 | reranker-qwen-vl | Qwen3-VL-Reranker-2B Q4_K_M | ~1.1 GB |
+| GPU 1 | reranker-qwen-vl | Qwen3-VL-Reranker-2B Q4_K_M | ~1.2 GB |
 | **GPU 1 合计** | | | **~7.3 GB / 16 GB** |
 
 > 两卡各有约 50% 显存余量，选用最大规格的文本 Embedding 和 Reranker 完全可行。
@@ -51,7 +51,7 @@
 | [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) | 多模态向量化 ×1 | 社区 GGUF | 社区 |
 | [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 文本重排序 ×2（HF 格式） | — | 官方 |
 | [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) | 文本重排序 ×1 | 社区 GGUF | 社区 |
-| [Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) | 多模态重排序 ×1（需转换） | 暂无 GGUF | 官方 HF 格式 |
+| [mradermacher/Qwen3-VL-Reranker-2B-GGUF](https://huggingface.co/mradermacher/Qwen3-VL-Reranker-2B-GGUF) | 多模态重排序 ×1 | 社区 GGUF | 社区 |
 
 ### BGE 系列（HF 格式，直接下载）
 
@@ -86,24 +86,16 @@ huggingface-cli download QuantFactory/Qwen3-Reranker-8B-GGUF \
     --local-dir Models/qwen3-reranker-8b
 ```
 
-### Qwen3-VL-Reranker-2B（暂无 GGUF，需自行转换）
+### Qwen3-VL-Reranker-2B（社区 GGUF，直接下载）
 
 ```bash
-# 第一步：下载 HF 原始格式
-huggingface-cli download Qwen/Qwen3-VL-Reranker-2B \
-    --local-dir Models/Qwen3-VL-Reranker-2B-hf
-
-# 第二步：克隆 llama.cpp 并安装依赖（有网环境）
-git clone https://github.com/ggml-org/llama.cpp
-pip install -r llama.cpp/requirements.txt
-
-# 第三步：转换为 Q4_K_M GGUF
-python llama.cpp/convert_hf_to_gguf.py Models/Qwen3-VL-Reranker-2B-hf \
-    --outfile Models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B-Q4_K_M.gguf \
-    --outtype q4_k_m
+# mradermacher 社区 GGUF，文件名格式：Qwen3-VL-Reranker-2B.Q4_K_M.gguf
+huggingface-cli download mradermacher/Qwen3-VL-Reranker-2B-GGUF \
+    --include "Qwen3-VL-Reranker-2B.Q4_K_M.gguf" \
+    --local-dir Models/Qwen3-VL-Reranker-2B
 ```
 
-> 💡 也可持续关注 HuggingFace Hub，当社区发布 Qwen3-VL-Reranker-2B 的 GGUF 版本后，直接下载替换即可，无需改动 `docker-compose.yml`。
+> 💡 该仓库同时提供 mmproj 文件（用于图像输入），本方案仅做文本重排序，**无需下载 mmproj**，只下载主 GGUF 文件即可。
 
 ---
 
@@ -456,7 +448,7 @@ embed-deploy/
 │   ├── qwen3-reranker-8b/
 │   │   └── Qwen3-Reranker-8B-Q4_K_M.gguf   # Qwen3 文本重排序 8B（社区 GGUF，llama.cpp 加载）
 │   └── Qwen3-VL-Reranker-2B/
-│       └── Qwen3-VL-Reranker-2B-Q4_K_M.gguf  # 多模态重排序（需自行转换）
+│       └── Qwen3-VL-Reranker-2B.Q4_K_M.gguf   # 多模态重排序（社区 GGUF，mradermacher）
 ├── web/
 │   └── index.html
 ├── nginx/
@@ -586,7 +578,7 @@ curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
 | **模型** | `Models/qwen3-embedding-8b/` | Qwen3-Embedding-8B（官方 GGUF） | [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) |
 | **模型** | `Models/Qwen3-VL-Embedding-2B/` | Qwen3-VL-Embedding-2B（社区 GGUF） | [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) |
 | **模型** | `Models/qwen3-reranker-8b/` | Qwen3-Reranker-8B（社区 GGUF） | [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) |
-| **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（需自行转换） | [Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) |
+| **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（社区 GGUF） | [mradermacher/Qwen3-VL-Reranker-2B-GGUF](https://huggingface.co/mradermacher/Qwen3-VL-Reranker-2B-GGUF) |
 | **镜像** | `Images/` | Infinity 推理引擎（BGE 系列） | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
 | **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggml-org/llama.cpp:server-cuda` |
 | **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |

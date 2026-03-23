@@ -172,7 +172,7 @@ services:
     container_name: reranker-qwen-vl
     command:
       - "--model"
-      - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B-Q4_K_M.gguf"
+      - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B.Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
