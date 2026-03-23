@@ -364,10 +364,10 @@ sudo systemctl restart docker
 
 | 特性 | 说明 |
 |------|------|
-| **原生 GGUF** | 官方 GGUF 量化包无需任何转换即可直接加载 |
+| **原生 GGUF** | llama.cpp 只支持 GGUF 格式，这是引擎的硬性要求，非量化选择 |
+| **量化可选** | `F16` GGUF 零精度损失；`Q4_K_M` 约占原模型 25% 显存，按实际显存余量选择 |
 | **Qwen3 全系支持** | 文本及 VL 系列 Embedding/Reranker 模型统一单文件加载，无额外依赖 |
 | **OpenAI 兼容** | Server 模式暴露 `/v1/embeddings`（`--embedding`）和 `/v1/rerank`（`--rerank`） |
-| **显存高效** | Q4_K_M 量化后显存占用低，与 BGE 模型共享同一 GPU 时余量充足 |
 
 ---
 
@@ -380,7 +380,7 @@ sudo systemctl restart docker
 docker pull --platform linux/amd64 michaelf34/infinity:latest
 
 # ── llama.cpp CUDA 版（Qwen3 系列引擎，约 6GB，GitHub Container Registry）──
-docker pull --platform linux/amd64 ghcr.io/ggerganov/llama.cpp:server-cuda
+docker pull --platform linux/amd64 ghcr.io/ggml-org/llama.cpp:server-cuda
 
 # ── Nginx 负载均衡 ────────────────────────────────────────────────────
 docker pull --platform linux/amd64 nginx:latest
@@ -392,7 +392,7 @@ docker pull --platform linux/amd64 nginx:latest
 
 ```bash
 docker save -o infinity_latest_amd64.tar          michaelf34/infinity:latest
-docker save -o llamacpp_server_cuda_amd64.tar     ghcr.io/ggerganov/llama.cpp:server-cuda
+docker save -o llamacpp_server_cuda_amd64.tar     ghcr.io/ggml-org/llama.cpp:server-cuda
 docker save -o nginx_latest_amd64.tar             nginx:latest
 ```
 
@@ -562,7 +562,7 @@ curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
 | **模型** | `Models/qwen3-reranker-0.6b/` | Qwen3-Reranker-0.6B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B) |
 | **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（GGUF，转换） | [Hugging Face: Qwen/Qwen3-VL-Reranker-2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B) |
 | **镜像** | `Images/` | Infinity 推理引擎（BGE 系列） | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
-| **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggerganov/llama.cpp:server-cuda` |
+| **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggml-org/llama.cpp:server-cuda` |
 | **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |
 | 一 | `Base/Kernel_Base/` | kernel / kernel-devel / kernel-headers | [麒麟 V10SP1.1 Packages](https://update.cs2c.com.cn/NS/V10/V10SP1.1/os/adv/lic/updates/x86_64/Packages/) |
 | 三 | `Base/` | NVIDIA-Linux-x86_64-550.163.01.run | [NVIDIA 数据中心驱动](https://www.nvidia.com/download/driverResults.aspx/243537/en-us/) |

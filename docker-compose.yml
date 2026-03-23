@@ -19,7 +19,7 @@ x-infinity-base: &infinity-base
 
 # ── Qwen 服务公共底座（llama.cpp CUDA 引擎）──────────────────────────
 x-llamacpp-base: &llamacpp-base
-  image: ghcr.io/ggerganov/llama.cpp:server-cuda
+  image: ghcr.io/ggml-org/llama.cpp:server-cuda
   volumes:
     - ./Models:/models
   ipc: host
