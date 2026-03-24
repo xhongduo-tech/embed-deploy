@@ -1,10 +1,10 @@
-# 8 节点向量化/重排序推理服务（双引擎架构）
+# 10 节点向量化/重排序推理服务（双引擎架构）
 # ┌─ BGE 系列  → Infinity 引擎（保持原有路径，现有用户无感）
 # └─ Qwen3 系列 → llama.cpp 引擎（原生 GGUF；VL 模型另需 --mmproj 多模态投影）
 #
 # GPU 分配：
-#   GPU 0 → embed-1 / embed-2 / embed-qwen-8b / embed-qwen-vl   (~8.2 GB / 16 GB)
-#   GPU 1 → reranker-1 / reranker-2 / reranker-qwen / reranker-qwen-vl  (~7.3 GB / 16 GB)
+#   GPU 0 → embed-1 / embed-2 / embed-3 / embed-qwen-8b / embed-qwen-8b-2 / embed-qwen-vl
+#   GPU 1 → reranker-1 / reranker-2 / reranker-qwen / reranker-qwen-vl
 #
 # Qwen3 模型选型：
 #   文本 Embedding  → Qwen3-Embedding-8B   Q4_K_M  4.68 GB  官方 GGUF
@@ -18,19 +18,19 @@ version: '3.8'
 x-infinity-base: &infinity-base
   image: michaelf34/infinity:latest
   volumes:
-    - ./Models:/models
+    - ./models:/models
   ipc: host
 
 # ── Qwen3 服务公共底座（llama.cpp CUDA 引擎）──────────────────────────
 x-llamacpp-base: &llamacpp-base
   image: ghcr.io/ggml-org/llama.cpp:server-cuda
   volumes:
-    - ./Models:/models
+    - ./models:/models
   ipc: host
 
 services:
   # ═══════════════════════════════════════════════════════════════════
-  # BGE Embedding（Infinity，GPU 0）—— 路径 /v1/embeddings，保持不变
+  # BGE Embedding（Infinity，GPU 0，3 节点负载均衡）—— 路径 /v1/embeddings
   # ═══════════════════════════════════════════════════════════════════
   embed-1:
     <<: *infinity-base
@@ -56,25 +56,36 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
 
+  embed-3:
+    <<: *infinity-base
+    container_name: embed-3
+    command: ["v2", "--model-id", "/models/bge-m3", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
   # ═══════════════════════════════════════════════════════════════════
   # Qwen3 Embedding（llama.cpp，GPU 0）
   # ═══════════════════════════════════════════════════════════════════
 
-  # 文本向量化：Qwen3-Embedding-8B（官方 GGUF，Qwen/Qwen3-Embedding-8B-GGUF）
-  # 文件名固定为 model-Q4_K_M.gguf（官方仓库命名规范）
+  # 文本向量化：Qwen3-Embedding-8B（根目录 GGUF：Qwen3-Embedding-8B-Q4_K_M.gguf，2 节点）
   embed-qwen-8b:
     <<: *llamacpp-base
     container_name: embed-qwen-8b
     command:
       - "--model"
-      - "/models/qwen3-embedding-8b/model-Q4_K_M.gguf"
+      - "/models/Qwen3-Embedding-8B-Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "8000"
       - "--embedding"
       - "--ctx-size"
-      - "4096"
+      - "16384"
       - "-ngl"
       - "99"
     deploy:
@@ -85,23 +96,47 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
 
-  # 多模态向量化：Qwen3-VL-Embedding-2B（主 GGUF + mmproj，DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF）
-  # 注意文件名前缀为 "Qwen." —— DevQuasar 仓库命名规范
-  embed-qwen-vl:
+  embed-qwen-8b-2:
     <<: *llamacpp-base
-    container_name: embed-qwen-vl
+    container_name: embed-qwen-8b-2
     command:
       - "--model"
-      - "/models/Qwen3-VL-Embedding-2B/Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf"
-      - "--mmproj"
-      - "/models/Qwen3-VL-Embedding-2B/mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf"
+      - "/models/Qwen3-Embedding-8B-Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "8000"
       - "--embedding"
       - "--ctx-size"
-      - "4096"
+      - "16384"
+      - "-ngl"
+      - "99"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  # 多模态向量化：Qwen3-VL-Embedding-2B（根目录 GGUF + mmproj）
+  embed-qwen-vl:
+    <<: *llamacpp-base
+    container_name: embed-qwen-vl
+    command:
+      - "--model"
+      - "/models/Qwen3-VL-Embedding-2B-Q4_K_M.gguf"
+      - "--mmproj"
+      - "/models/Qwen3-VL-Embedding-2B-mmproj_f16.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--embedding"
+      - "--pooling"
+      - "mean"
+      - "--ctx-size"
+      - "16384"
       - "-ngl"
       - "99"
     deploy:
@@ -143,20 +178,20 @@ services:
   # Qwen3 Reranker（llama.cpp，GPU 1）
   # ═══════════════════════════════════════════════════════════════════
 
-  # 文本重排：Qwen3-Reranker-8B（社区 GGUF，QuantFactory/Qwen3-Reranker-8B-GGUF）
+  # 文本重排：Qwen3-Reranker-8B（根目录 GGUF：Qwen3-Reranker-8B-Q4_K_M.gguf）
   reranker-qwen:
     <<: *llamacpp-base
     container_name: reranker-qwen
     command:
       - "--model"
-      - "/models/qwen3-reranker-8b/Qwen3-Reranker-8B-Q4_K_M.gguf"
+      - "/models/Qwen3-Reranker-8B-Q4_K_M.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "8000"
       - "--rerank"
       - "--ctx-size"
-      - "4096"
+      - "16384"
       - "-ngl"
       - "99"
     deploy:
@@ -167,22 +202,24 @@ services:
               device_ids: ['1']
               capabilities: [gpu]
 
-  # 多模态重排：Qwen3-VL-Reranker-2B（主 GGUF + mmproj，mradermacher/Qwen3-VL-Reranker-2B-GGUF）
+  # 多模态重排：Qwen3-VL-Reranker-2B（根目录 GGUF + mmproj）
   reranker-qwen-vl:
     <<: *llamacpp-base
     container_name: reranker-qwen-vl
     command:
       - "--model"
-      - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B.Q4_K_M.gguf"
+      - "/models/Qwen3-VL-Reranker-2B-Q4_K_M.gguf"
       - "--mmproj"
-      - "/models/Qwen3-VL-Reranker-2B/Qwen3-VL-Reranker-2B.mmproj-f16.gguf"
+      - "/models/Qwen3-VL-Reranker-2B-mmproj-_f16.gguf"
       - "--host"
       - "0.0.0.0"
       - "--port"
       - "8000"
       - "--rerank"
+      - "--pooling"
+      - "mean"
       - "--ctx-size"
-      - "4096"
+      - "16384"
       - "-ngl"
       - "99"
     deploy:
@@ -201,13 +238,15 @@ services:
     container_name: model-nginx
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./web:/usr/share/nginx/html:ro
+      - ./nginx.html:/usr/share/nginx/html:ro
     ports:
-      - "8080:8080"
+      - "80:8080"
     depends_on:
       - embed-1
       - embed-2
+      - embed-3
       - embed-qwen-8b
+      - embed-qwen-8b-2
       - embed-qwen-vl
       - reranker-1
       - reranker-2

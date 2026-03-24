@@ -1,8 +1,8 @@
-# 离线环境 8 节点向量化/重排序模型部署指南
+# 离线环境 10 节点向量化/重排序模型部署指南
 
 ## 📑 项目背景与环境说明
 
-本项目旨在为行内离线内网环境完整部署 8 节点向量化及重排序（Reranker）模型。由于物理机环境的特殊性，整个实施过程必须在严格的离线状态下进行。
+本项目旨在为行内离线内网环境完整部署 **10** 个推理容器节点（向量化及重排序 / Reranker）与 Nginx 网关。由于物理机环境的特殊性，整个实施过程必须在严格的离线状态下进行。
 
 **基础环境约束：**
 
@@ -14,7 +14,7 @@
 
 ## 🤗 模型下载（Hugging Face）
 
-本项目使用 BGE 系列与 Qwen3 系列向量化与重排序模型，**模型文件未纳入 Git 仓库**，请在有网环境从 Hugging Face 下载后放入 `Models/` 目录，再拷贝至离线环境。
+本项目使用 BGE 系列与 Qwen3 系列向量化与重排序模型，**模型文件未纳入 Git 仓库**，请在有网环境从 Hugging Face 下载后放入 **`models/`** 目录（小写，与 `docker-compose.yml` 卷挂载一致），再拷贝至离线环境。
 
 ### 引擎与格式说明
 
@@ -29,25 +29,25 @@
 
 基于 V100 16GB 显存，各节点实际占用如下：
 
-| GPU | 容器 | 模型 | VRAM |
+| GPU | 容器 | 模型 | VRAM（单容器参考） |
 |-----|------|------|------|
-| GPU 0 | embed-1 / embed-2 | BGE-M3 ×2（Infinity） | ~2.4 GB |
-| GPU 0 | embed-qwen-8b | Qwen3-Embedding-8B Q4_K_M | 4.68 GB |
+| GPU 0 | embed-1 / embed-2 / embed-3 | BGE-M3 ×3（Infinity） | ~3.6 GB |
+| GPU 0 | embed-qwen-8b / embed-qwen-8b-2 | Qwen3-Embedding-8B Q4_K_M ×2 | 4.68 GB ×2 |
 | GPU 0 | embed-qwen-vl | Qwen3-VL-Embedding-2B Q4_K_M + mmproj F16 | ~1.9 GB |
-| **GPU 0 合计** | | | **~9.0 GB / 16 GB** |
+| **GPU 0 合计** | | | **同卡多实例时以 `nvidia-smi` 实测为准** |
 | GPU 1 | reranker-1 / reranker-2 | BGE-Reranker-V2-M3 ×2（Infinity） | ~1.2 GB |
 | GPU 1 | reranker-qwen | Qwen3-Reranker-8B Q4_K_M | 5.03 GB |
 | GPU 1 | reranker-qwen-vl | Qwen3-VL-Reranker-2B Q4_K_M + mmproj F16 | ~2.0 GB |
 | **GPU 1 合计** | | | **~8.2 GB / 16 GB** |
 
-> 两卡各有约 50% 显存余量，选用最大规格的文本 Embedding 和 Reranker 完全可行。
+> BGE 与 Qwen 文本向量化在同一张 GPU 上多实例并行时，显存叠加明显；部署后务必用 `nvidia-smi` 观察，必要时调整实例数或换更大显存 GPU。
 
 ### 模型清单与下载命令
 
 | 模型 | 用途 | GGUF 来源 | HuggingFace 仓库 |
 |------|------|-----------|-----------------|
-| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 文本向量化 ×2（HF 格式） | — | 官方 |
-| [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) | 文本向量化 ×1 | **官方** GGUF | 官方 |
+| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 文本向量化 ×3（HF 格式） | — | 官方 |
+| [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) | 文本向量化 ×2 | **官方** GGUF | 官方 |
 | [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) | 多模态向量化 ×1 | 社区 GGUF | 社区 |
 | [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 文本重排序 ×2（HF 格式） | — | 官方 |
 | [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) | 文本重排序 ×1 | 社区 GGUF | 社区 |
@@ -56,27 +56,27 @@
 ### BGE 系列（HF 格式，直接下载）
 
 ```bash
-huggingface-cli download BAAI/bge-m3              --local-dir Models/bge-m3
-huggingface-cli download BAAI/bge-reranker-v2-m3  --local-dir Models/bge-reranker-v2-m3
+huggingface-cli download BAAI/bge-m3              --local-dir models/bge-m3
+huggingface-cli download BAAI/bge-reranker-v2-m3  --local-dir models/bge-reranker-v2-m3
 ```
 
 ### Qwen3-Embedding-8B（官方 GGUF，直接下载）
 
 ```bash
-# 官方仓库文件名固定为 model-Q4_K_M.gguf
+# 官方仓库常见文件名为 model-Q4_K_M.gguf；若与 compose 中路径一致，可复制为 models/Qwen3-Embedding-8B-Q4_K_M.gguf（见下文「模型目录结构」）
 huggingface-cli download Qwen/Qwen3-Embedding-8B-GGUF \
     --include "model-Q4_K_M.gguf" \
-    --local-dir Models/qwen3-embedding-8b
+    --local-dir models/qwen3-embedding-8b
 ```
 
 ### Qwen3-VL-Embedding-2B（社区 GGUF，直接下载）
 
 ```bash
-# DevQuasar 仓库命名规范：文件名以 "Qwen." 开头
+# DevQuasar 仓库文件名常以 "Qwen." 开头；若采用根目录扁平布局，请重命名为 compose 中路径（如 Qwen3-VL-Embedding-2B-Q4_K_M.gguf 与 Qwen3-VL-Embedding-2B-mmproj_f16.gguf）
 huggingface-cli download DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF \
     --include "Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf" \
     --include "mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf" \
-    --local-dir Models/Qwen3-VL-Embedding-2B
+    --local-dir models/Qwen3-VL-Embedding-2B
 ```
 
 ### Qwen3-Reranker-8B（社区 GGUF，直接下载）
@@ -84,17 +84,17 @@ huggingface-cli download DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF \
 ```bash
 huggingface-cli download QuantFactory/Qwen3-Reranker-8B-GGUF \
     --include "Qwen3-Reranker-8B-Q4_K_M.gguf" \
-    --local-dir Models/qwen3-reranker-8b
+    --local-dir models/qwen3-reranker-8b
 ```
 
 ### Qwen3-VL-Reranker-2B（社区 GGUF，直接下载）
 
 ```bash
-# mradermacher 社区 GGUF，文件名格式：Qwen3-VL-Reranker-2B.Q4_K_M.gguf
+# 下载后若采用根目录扁平布局，文件名需与 compose 一致（如 Qwen3-VL-Reranker-2B-Q4_K_M.gguf、Qwen3-VL-Reranker-2B-mmproj-_f16.gguf，注意个别社区包 mmproj 文件名含连字符）
 huggingface-cli download mradermacher/Qwen3-VL-Reranker-2B-GGUF \
     --include "Qwen3-VL-Reranker-2B.Q4_K_M.gguf" \
     --include "Qwen3-VL-Reranker-2B.mmproj-f16.gguf" \
-    --local-dir Models/Qwen3-VL-Reranker-2B
+    --local-dir models/Qwen3-VL-Reranker-2B
 ```
 
 > 💡 多模态能力依赖 mmproj：仓库还提供 `Qwen3-VL-Reranker-2B.mmproj-Q8_0.gguf`（体积更小）。若改用 Q8_0，请将 `docker-compose.yml` 中 `reranker-qwen-vl` 的 `--mmproj` 路径改为对应文件名。
@@ -355,7 +355,7 @@ sudo systemctl restart docker
 
 ## 🚀 第五阶段：Docker 镜像下载与推理服务部署
 
-本阶段采用**双引擎架构**，8 个节点按模型系列使用不同引擎：
+本阶段采用**双引擎架构**，**10** 个推理容器节点按模型系列使用不同引擎（另含 Nginx 网关）：
 
 | 引擎 | 镜像来源 | 服务对象 | 选型原因 |
 |------|----------|----------|----------|
@@ -387,7 +387,7 @@ sudo systemctl restart docker
 | **原生 GGUF** | llama.cpp 只支持 GGUF 格式，这是引擎的硬性要求，非量化选择 |
 | **量化可选** | `F16` GGUF 零精度损失；`Q4_K_M` 约占原模型 25% 显存，按实际显存余量选择 |
 | **Qwen3 全系支持** | 文本模型单 GGUF；VL Embedding / VL Reranker 需主 GGUF + mmproj（与 `docker-compose.yml` 一致） |
-| **OpenAI 兼容** | Server 模式暴露 `/v1/embeddings`（`--embedding`）和 `/v1/rerank`（`--rerank`） |
+| **OpenAI 兼容** | Server 模式在容器内暴露 `/v1/embeddings`（`--embedding`）与 `/v1/rerank`（`--rerank`）；经网关的 Qwen 路径由 Nginx 转发到对应上游（见「API 路由说明」） |
 
 ---
 
@@ -436,23 +436,19 @@ docker images | grep -E "infinity|llama|nginx"
 
 ### 5. 模型目录结构
 
-所有模型放入 `Models/` 目录，最终结构如下：
+所有模型放入 **`models/`** 目录（与 `docker-compose.yml` 中 `./models:/models` 一致）。当前仓库中的 **`docker-compose.yml` 采用「BGE 仍为子目录 + Qwen GGUF 放在 `models/` 根目录」的扁平命名**，便于与多源下载的文件名对齐，例如：
 
 ```
 embed-deploy/
-├── Models/
-│   ├── bge-m3/                               # BGE 文本向量化（HF 格式，Infinity 加载）
-│   ├── bge-reranker-v2-m3/                   # BGE 文本重排序（HF 格式，Infinity 加载）
-│   ├── qwen3-embedding-8b/
-│   │   └── model-Q4_K_M.gguf                # Qwen3 文本向量化 8B（官方 GGUF，llama.cpp 加载）
-│   ├── Qwen3-VL-Embedding-2B/
-│   │   ├── Qwen.Qwen3-VL-Embedding-2B-Q4_K_M.gguf   # 主模型（社区 GGUF，注意文件名前缀）
-│   │   └── mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf  # 多模态投影（与主模型配套）
-│   ├── qwen3-reranker-8b/
-│   │   └── Qwen3-Reranker-8B-Q4_K_M.gguf   # Qwen3 文本重排序 8B（社区 GGUF，llama.cpp 加载）
-│   └── Qwen3-VL-Reranker-2B/
-│       ├── Qwen3-VL-Reranker-2B.Q4_K_M.gguf    # 主模型（社区 GGUF，mradermacher）
-│       └── Qwen3-VL-Reranker-2B.mmproj-f16.gguf  # 多模态投影（与主模型配套）
+├── models/
+│   ├── bge-m3/                               # BGE 文本向量化 ×3（HF，Infinity）
+│   ├── bge-reranker-v2-m3/                   # BGE 文本重排序 ×2（HF，Infinity）
+│   ├── Qwen3-Embedding-8B-Q4_K_M.gguf        # Qwen3 文本向量化 ×2（llama.cpp，两实例共用一个文件）
+│   ├── Qwen3-VL-Embedding-2B-Q4_K_M.gguf     # VL 主模型
+│   ├── Qwen3-VL-Embedding-2B-mmproj_f16.gguf # VL mmproj（文件名需与 compose 中 --mmproj 一致）
+│   ├── Qwen3-Reranker-8B-Q4_K_M.gguf
+│   ├── Qwen3-VL-Reranker-2B-Q4_K_M.gguf
+│   └── Qwen3-VL-Reranker-2B-mmproj-_f16.gguf # 个别社区包文件名含额外连字符，以磁盘实际为准
 ├── web/
 │   └── index.html
 ├── nginx/
@@ -461,7 +457,11 @@ embed-deploy/
 └── README.md
 ```
 
-> ⚠️ **文件名确认**：`docker-compose.yml` 中 `--model` 与 VL 服务的 `--mmproj` 路径必须与实际文件名一致（量化版本如 `Q4_K_M`、`Q8_0` 因下载源不同而异）。若文件名不同，直接修改 `docker-compose.yml` 中对应行即可，其余配置无需改动。
+若你更习惯「每个 Qwen 模型单独子目录」，可将 GGUF 放入子目录并**相应修改** `docker-compose.yml` 里的 `--model` / `--mmproj` 路径；只要容器内路径与文件一致即可。
+
+> ⚠️ **文件名确认**：`docker-compose.yml` 中 `--model` 与 VL 服务的 `--mmproj` 路径必须与实际文件名一致（不同 Hugging Face 仓库命名可能不同）。若文件名不同，直接修改 `docker-compose.yml` 中对应行即可。
+
+**llama.cpp 侧常用参数（已在 compose 中配置）**：文本与 VL 的 Embedding/Rerank 使用 **`--ctx-size 16384`**；两个 VL 服务额外使用 **`--pooling mean`**。
 
 ---
 
@@ -473,7 +473,7 @@ embed-deploy/
 docker-compose up -d
 ```
 
-所有节点显示为绿色（Up）即表示启动成功。服务对外暴露端口 **8080**。
+所有节点显示为绿色（Up）即表示启动成功。Nginx 默认将宿主机 **80** 映射到容器内 **8080**（见 `docker-compose.yml` 的 `ports`），因此浏览器或 `curl` 可使用 **`http://<服务器IP>/`**（等价于 `:80`）。
 
 查看各节点状态：
 
@@ -485,6 +485,7 @@ docker-compose ps
 
 ```bash
 docker logs embed-qwen-8b
+docker logs embed-qwen-8b-2
 docker logs embed-qwen-vl
 docker logs reranker-qwen
 docker logs reranker-qwen-vl
@@ -498,52 +499,58 @@ docker logs reranker-qwen-vl
 
 | 请求路径（对外） | 内部引擎 | 路由目标 | 对应模型 |
 |-----------------|----------|----------|----------|
-| `POST /v1/embeddings` | Infinity | bge_embed_pool（2 节点） | BGE-M3 |
-| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-8b | Qwen3-Embedding-8B |
+| `POST /v1/embeddings` | Infinity | bge_embed_pool（**3** 节点） | BGE-M3 |
+| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-8b + embed-qwen-8b-2（**2** 节点） | Qwen3-Embedding-8B |
 | `POST /v1/qwen-vl-embed` | llama.cpp | embed-qwen-vl | Qwen3-VL-Embedding-2B |
 | `POST /v1/rerank` | Infinity | bge_rerank_pool（2 节点） | BGE-Reranker-V2-M3 |
 | `POST /v1/qwen-rerank` | llama.cpp | reranker-qwen | Qwen3-Reranker-8B |
 | `POST /v1/qwen-vl-rerank` | llama.cpp | reranker-qwen-vl | Qwen3-VL-Reranker-2B |
 
+**网关路径重写（`nginx/nginx.conf`）**：在 `location /v1/embeddings` 与 `location /v1/rerank` 内，先将 URI 重写为 `/embeddings`、`/rerank` 再转发到上游（`rewrite ... break`），以便与后端实际监听路径一致。Qwen 专用路径（`/v1/qwen-embed` 等）为 **location 前缀匹配**，仍按表中方式 `proxy_pass` 到各 llama.cpp 容器的 `/v1/embeddings` 或 `/v1/rerank`。
+
+**VL 请求体（经联调约定）**：向量化使用 **`input`（字符串）** + **`image_data`（完整 Data URL）**；多模态重排使用 **`query`（字符串）** + **`image_data`** + **`documents`（字符串数组）**。详见仓库内 `web/index.html` 文档页示例。
+
 ---
 
 ### 8. 验证与调用
 
+以下示例默认访问 **本机 Nginx**（`docker-compose` 中 **`80:8080`**，故使用 `http://localhost`；若你改为映射 `8080:8080`，请把主机名改为 `localhost:8080`）。
+
 ```bash
-# BGE-M3 向量化（Infinity，旧接口不变）
-curl -X POST http://localhost:8080/v1/embeddings \
+# BGE-M3 向量化（Infinity）
+curl -X POST http://localhost/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{"input": "测试文本", "model": "bge-m3"}'
 
-# Qwen3-Embedding-4B 向量化（llama.cpp）
-curl -X POST http://localhost:8080/v1/qwen-embed \
+# Qwen3-Embedding-8B 向量化（llama.cpp）
+curl -X POST http://localhost/v1/qwen-embed \
   -H "Content-Type: application/json" \
-  -d '{"input": "测试文本", "model": "qwen3-embedding-8b"}'
+  -d '{"input": ["测试文本"], "model": "qwen3-embedding-8b"}'
 
-# Qwen3-VL-Embedding-2B 多模态向量化（llama.cpp）
-curl -X POST http://localhost:8080/v1/qwen-vl-embed \
+# Qwen3-VL-Embedding-2B 多模态向量化（llama.cpp，扁平字段）
+curl -X POST http://localhost/v1/qwen-vl-embed \
   -H "Content-Type: application/json" \
-  -d '{"input": "测试文本", "model": "Qwen3-VL-Embedding-2B"}'
+  -d '{"model":"Qwen3-VL-Embedding-2B","input":"请结合图片与这句话生成向量：产品是否在画面中？","image_data":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="}'
 
-# BGE-Reranker 重排序（Infinity，旧接口不变）
-curl -X POST http://localhost:8080/v1/rerank \
+# BGE-Reranker 重排序（Infinity）
+curl -X POST http://localhost/v1/rerank \
   -H "Content-Type: application/json" \
   -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "bge-reranker-v2-m3"}'
 
-# Qwen3-Reranker-0.6B 重排序（llama.cpp）
-curl -X POST http://localhost:8080/v1/qwen-rerank \
+# Qwen3-Reranker-8B 重排序（llama.cpp）
+curl -X POST http://localhost/v1/qwen-rerank \
   -H "Content-Type: application/json" \
-  -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "qwen3-reranker-0.6b"}'
+  -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "qwen3-reranker-8b"}'
 
-# Qwen3-VL-Reranker-2B 多模态重排序（llama.cpp）
-curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
+# Qwen3-VL-Reranker-2B 多模态重排序（llama.cpp，扁平字段）
+curl -X POST http://localhost/v1/qwen-vl-rerank \
   -H "Content-Type: application/json" \
-  -d '{"query": "查询", "documents": ["文档1", "文档2"], "model": "Qwen3-VL-Reranker-2B"}'
+  -d '{"model":"Qwen3-VL-Reranker-2B","query":"用户上传的截图里有没有错误提示？","image_data":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==","documents":["界面显示「连接超时」，属于网络类报错。","今天天气不错，与截图无关。"]}'
 ```
 
 ### 9. 页端访问
 
-启动后，在浏览器访问 **http://\<服务器IP\>:8080/** 即可打开 **API 使用文档页**，提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等多种调用示例，支持一键复制。页端中的示例 URL 为 `http://api-embed.cs.icbc`，实际部署时请根据内网域名或 IP 替换。
+启动后，在浏览器访问 **`http://<服务器IP>/`**（默认 **80** 端口）即可打开 **API 使用文档页**。文档源码在仓库 **`web/index.html`**；若你使用的 `docker-compose.yml` 将站点根目录挂载为其他路径（例如单文件 `nginx.html`），请保持挂载与编辑的源文件一致。页内提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等示例；示例域名为 `http://api-embed.cs.icbc`，实际部署时请替换为内网域名或 IP。
 
 > **注意：** 若使用离线导入的镜像，需确保 `docker-compose.yml` 中的 `image` 名称与 `docker load` 后的镜像名一致。
 
@@ -559,13 +566,13 @@ curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
 | 四 | Docker 运行正常 | `docker run --rm hello-world` |
 | 四 | GPU 透传可用 | `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi` |
 | 五 | 推理服务启动 | `docker-compose ps` 全部 Up |
-| 五 | 页端可访问 | 浏览器打开 `http://<IP>:8080/` |
-| 五 | BGE Embedding 可用 | `curl -X POST http://localhost:8080/v1/embeddings ...` |
-| 五 | Qwen Embedding 可用 | `curl -X POST http://localhost:8080/v1/qwen-embed ...` |
-| 五 | Qwen VL Embedding 可用 | `curl -X POST http://localhost:8080/v1/qwen-vl-embed ...` |
-| 五 | BGE Rerank 可用 | `curl -X POST http://localhost:8080/v1/rerank ...` |
-| 五 | Qwen Rerank 可用 | `curl -X POST http://localhost:8080/v1/qwen-rerank ...` |
-| 五 | Qwen VL Rerank 可用 | `curl -X POST http://localhost:8080/v1/qwen-vl-rerank ...` |
+| 五 | 页端可访问 | 浏览器打开 `http://<IP>/`（默认端口 80） |
+| 五 | BGE Embedding 可用 | `curl -X POST http://localhost/v1/embeddings ...` |
+| 五 | Qwen Embedding 可用 | `curl -X POST http://localhost/v1/qwen-embed ...` |
+| 五 | Qwen VL Embedding 可用 | `curl -X POST http://localhost/v1/qwen-vl-embed ...`（含 `image_data`） |
+| 五 | BGE Rerank 可用 | `curl -X POST http://localhost/v1/rerank ...` |
+| 五 | Qwen Rerank 可用 | `curl -X POST http://localhost/v1/qwen-rerank ...` |
+| 五 | Qwen VL Rerank 可用 | `curl -X POST http://localhost/v1/qwen-vl-rerank ...`（含 `image_data`） |
 
 ---
 
@@ -577,12 +584,9 @@ curl -X POST http://localhost:8080/v1/qwen-vl-rerank \
 
 | 类别 | 本地路径 | 资源 | 下载链接 |
 |------|----------|------|----------|
-| **模型** | `Models/bge-m3/` | BGE-M3 文本向量化（HF 格式） | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
-| **模型** | `Models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 文本重排序（HF 格式） | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
-| **模型** | `Models/qwen3-embedding-8b/` | Qwen3-Embedding-8B（官方 GGUF） | [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) |
-| **模型** | `Models/Qwen3-VL-Embedding-2B/` | Qwen3-VL-Embedding-2B（社区 GGUF） | [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) |
-| **模型** | `Models/qwen3-reranker-8b/` | Qwen3-Reranker-8B（社区 GGUF） | [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) |
-| **模型** | `Models/Qwen3-VL-Reranker-2B/` | Qwen3-VL-Reranker-2B（社区 GGUF） | [mradermacher/Qwen3-VL-Reranker-2B-GGUF](https://huggingface.co/mradermacher/Qwen3-VL-Reranker-2B-GGUF) |
+| **模型** | `models/bge-m3/` | BGE-M3 文本向量化 ×3（HF 格式） | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
+| **模型** | `models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 文本重排序 ×2（HF 格式） | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
+| **模型** | `models/*.gguf`（见上节目录树） | Qwen3 系列 GGUF（Embedding ×2 共盘、Rerank、VL+mmproj） | 见上文「模型清单与下载命令」 |
 | **镜像** | `Images/` | Infinity 推理引擎（BGE 系列） | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
 | **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggml-org/llama.cpp:server-cuda` |
 | **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |

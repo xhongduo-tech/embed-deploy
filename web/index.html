@@ -689,7 +689,7 @@
                 <span class="step-num">4</span>
                 <div>
                     <strong>是否要多节点负载？</strong>
-                    <p>BGE 的 Embedding 与 Rerank 在网关侧均为<strong>双节点</strong>；Qwen3 各为单节点。若要强容灾，优先 BGE 路径或在前端自己做重试。</p>
+                    <p>BGE 的 Embedding 在网关侧为<strong>三节点</strong>，Rerank 为<strong>双节点</strong>；Qwen3 文本向量化（Qwen3-Embedding-8B）为<strong>双节点</strong>，VL 与各 Rerank 仍为单节点。若要强容灾，优先 BGE 路径或在前端自己做重试。</p>
                 </div>
             </div>
         </div>
@@ -717,14 +717,14 @@
                         <td>通用文本检索、要高并发、与 LangChain 示例最贴合</td>
                         <td><code>/v1/embeddings</code></td>
                         <td><code>bge-m3</code></td>
-                        <td>Infinity · 双节点</td>
+                        <td>Infinity · 三节点</td>
                     </tr>
                     <tr>
                         <td><span class="tag tag-qwen">Qwen3</span></td>
                         <td>纯文本、希望与 Qwen3 系列语义对齐</td>
                         <td><code>/v1/qwen-embed</code></td>
                         <td><code>qwen3-embedding-8b</code></td>
-                        <td>llama.cpp · 单节点</td>
+                        <td>llama.cpp · 双节点</td>
                     </tr>
                     <tr>
                         <td><span class="tag tag-vl">Qwen3-VL</span></td>
@@ -810,7 +810,7 @@
             </div>
 
             <div id="tab-curl" class="code-panel active" role="tabpanel" aria-labelledby="tab-btn-curl">
-                <h3 class="section-title">1. BGE-M3 · 文本向量化（双节点）</h3>
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（三节点）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -823,7 +823,7 @@
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -837,7 +837,7 @@
                 </div>
 
                 <h3 class="section-title">3. Qwen3-VL-Embedding-2B · 多模态向量化（含真实图片）</h3>
-                <p class="vl-note">下例中 <code>data:image/png;base64,...</code> 为一张真实 PNG（1×1 像素测试图）的 Data URL；实际使用时请换成你的截图或照片转成的 base64。若服务端对 <code>input</code> 结构要求不同，请以当前镜像的 llama.cpp Server 文档为准。</p>
+                <p class="vl-note"><code>input</code> 为文本；<code>image_data</code> 为 Data URL（含 <code>data:image/...;base64,</code> 前缀）。下例为 1×1 PNG 测试图，请替换为你的截图。</p>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -845,20 +845,8 @@
   -H <span class="c-string">"Content-Type: application/json"</span> \
   -d <span class="c-string">'{
     "model": "Qwen3-VL-Embedding-2B",
-    "input": [
-      {
-        "role": "user",
-        "content": [
-          { "type": "text", "text": "请结合图片与这句话生成向量：产品是否在画面中？" },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-            }
-          }
-        ]
-      }
-    ]
+    "input": "请结合图片与这句话生成向量：产品是否在画面中？",
+    "image_data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
   }'</span>
 </pre>
                 </div>
@@ -892,7 +880,7 @@
                 </div>
 
                 <h3 class="section-title">6. Qwen3-VL-Reranker-2B · 多模态重排（查询侧含真实图片）</h3>
-                <p class="vl-note">下例在 <code>query</code> 中放入与 Embedding 相同结构的图文内容，候选 <code>documents</code> 仍为纯文本（也可按服务端能力扩展为多模态片段）。图片为与上文相同的 1×1 PNG Data URL，可替换为你的业务截图。</p>
+                <p class="vl-note"><code>query</code> 为文本；<code>image_data</code> 与 Embedding 相同；<code>documents</code> 为候选文本列表。</p>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -900,20 +888,8 @@
   -H <span class="c-string">"Content-Type: application/json"</span> \
   -d <span class="c-string">'{
     "model": "Qwen3-VL-Reranker-2B",
-    "query": [
-      {
-        "role": "user",
-        "content": [
-          { "type": "text", "text": "用户上传的截图里有没有错误提示？" },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-            }
-          }
-        ]
-      }
-    ],
+    "query": "用户上传的截图里有没有错误提示？",
+    "image_data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "documents": [
       "界面显示「连接超时」，属于网络类报错。",
       "今天天气不错，与截图无关。"
@@ -924,7 +900,7 @@
             </div>
 
             <div id="tab-requests" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-requests">
-                <h3 class="section-title">1. BGE-M3 · 文本向量化（双节点）</h3>
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（三节点）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -938,7 +914,7 @@ res = requests.post(
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -953,7 +929,7 @@ res = requests.post(
                 </div>
 
                 <h3 class="section-title">3. Qwen3-VL-Embedding-2B · 多模态向量化（本地图片）</h3>
-                <p class="vl-note">将 <code>demo.png</code> 换为实际图片路径；服务端若对 <code>input</code> 结构要求不同，以当前 llama.cpp Server 为准。</p>
+                <p class="vl-note">将 <code>demo.png</code> 换为实际图片路径；读入后拼成 Data URL，与 <code>input</code> 文本一并 POST。</p>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -967,15 +943,8 @@ data_url = <span class="c-string">f"data:image/png;base64,{b64}"</span>
 
 payload = {
     <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
-    <span class="c-string">"input"</span>: [
-        {
-            <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
-            <span class="c-string">"content"</span>: [
-                {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"请结合图片生成向量，用于检索相似截图。"</span>},
-                {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: data_url}},
-            ],
-        }
-    ],
+    <span class="c-string">"input"</span>: <span class="c-string">"请结合图片生成向量，用于检索相似截图。"</span>,
+    <span class="c-string">"image_data"</span>: data_url,
 }
 res = requests.post(<span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-embed"</span>, json=payload)
 <span class="c-func">print</span>(<span class="c-string">"VL 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
@@ -1019,7 +988,7 @@ res = requests.post(
                 </div>
 
                 <h3 class="section-title">6. Qwen3-VL-Reranker-2B · 多模态重排（查询含图）</h3>
-                <p class="vl-note">将 <code>query_screenshot.png</code> 换为实际截图路径。</p>
+                <p class="vl-note">将 <code>query_screenshot.png</code> 换为实际截图路径；<code>query</code> 为文本，<code>image_data</code> 为 Data URL。</p>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1034,15 +1003,8 @@ res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-rerank"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
-        <span class="c-string">"query"</span>: [
-            {
-                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
-                <span class="c-string">"content"</span>: [
-                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>},
-                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: q_url}},
-                ],
-            }
-        ],
+        <span class="c-string">"query"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>,
+        <span class="c-string">"image_data"</span>: q_url,
         <span class="c-string">"documents"</span>: [
             <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
             <span class="c-string">"今天天气不错，与截图无关。"</span>,
@@ -1057,7 +1019,7 @@ res = requests.post(
             <div id="tab-openai" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-openai">
                 <p class="vl-note">官方 Python SDK 的 <code>embeddings.create</code> 仅请求 <code>/v1/embeddings</code>，故仅条目 1 用 SDK；条目 2～6 为独立网关路径，与 cURL 一致，请用 <code>requests</code>（或 <code>httpx</code>）直调。</p>
 
-                <h3 class="section-title">1. BGE-M3 · 文本向量化（OpenAI SDK）</h3>
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（三节点，OpenAI SDK）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1075,7 +1037,7 @@ response = client.embeddings.create(
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（HTTP）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点，HTTP）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1105,15 +1067,8 @@ res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-embed"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
-        <span class="c-string">"input"</span>: [
-            {
-                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
-                <span class="c-string">"content"</span>: [
-                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"请结合图片生成向量。"</span>},
-                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: data_url}},
-                ],
-            }
-        ],
+        <span class="c-string">"input"</span>: <span class="c-string">"请结合图片生成向量。"</span>,
+        <span class="c-string">"image_data"</span>: data_url,
     },
 )
 <span class="c-func">print</span>(<span class="c-string">"VL 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
@@ -1171,15 +1126,8 @@ res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-rerank"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
-        <span class="c-string">"query"</span>: [
-            {
-                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
-                <span class="c-string">"content"</span>: [
-                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>},
-                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: q_url}},
-                ],
-            }
-        ],
+        <span class="c-string">"query"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>,
+        <span class="c-string">"image_data"</span>: q_url,
         <span class="c-string">"documents"</span>: [
             <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
             <span class="c-string">"今天天气不错，与截图无关。"</span>,
@@ -1194,7 +1142,7 @@ res = requests.post(
             <div id="tab-nodejs" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-nodejs">
                 <p class="vl-note">需 Node 18+（内置 <code>fetch</code>）。条目 1 用官方 <code>openai</code> 包；条目 2～6 与 cURL 路径一致，使用 <code>fetch</code>。</p>
 
-                <h3 class="section-title">1. BGE-M3 · 文本向量化（openai 包）</h3>
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（三节点，openai 包）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1213,7 +1161,7 @@ res = requests.post(
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（fetch）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点，fetch）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1246,15 +1194,8 @@ res = requests.post(
   headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
   body: JSON.stringify({
     model: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
-    input: [
-      {
-        role: <span class="c-string">"user"</span>,
-        content: [
-          { type: <span class="c-string">"text"</span>, text: <span class="c-string">"请结合图片生成向量。"</span> },
-          { type: <span class="c-string">"image_url"</span>, image_url: { url: dataUrl } },
-        ],
-      },
-    ],
+    input: <span class="c-string">"请结合图片生成向量。"</span>,
+    image_data: dataUrl,
   }),
 });
 <span class="c-keyword">const</span> data = <span class="c-keyword">await</span> res.json();
@@ -1313,15 +1254,8 @@ res = requests.post(
   headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
   body: JSON.stringify({
     model: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
-    query: [
-      {
-        role: <span class="c-string">"user"</span>,
-        content: [
-          { type: <span class="c-string">"text"</span>, text: <span class="c-string">"用户上传的截图里有没有错误提示？"</span> },
-          { type: <span class="c-string">"image_url"</span>, image_url: { url: qUrl } },
-        ],
-      },
-    ],
+    query: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>,
+    image_data: qUrl,
     documents: [
       <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
       <span class="c-string">"今天天气不错，与截图无关。"</span>,
@@ -1336,7 +1270,7 @@ res = requests.post(
             <div id="tab-langchain" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-langchain">
                 <p class="vl-note"><code>OpenAIEmbeddings</code> 仅对接 <code>/v1/embeddings</code>，故条目 1 为 LangChain 写法；条目 2～6 与 cURL 一致，在链路与 Agent 中请用 <code>requests</code> 封装为工具函数或 Runnable。</p>
 
-                <h3 class="section-title">1. BGE-M3 · 文本向量化（LangChain OpenAIEmbeddings）</h3>
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（三节点，LangChain OpenAIEmbeddings）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1357,7 +1291,7 @@ docs_vectors = embeddings.embed_documents([
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（HTTP，便于封装进链）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点，HTTP，便于封装进链）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1388,15 +1322,8 @@ res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-embed"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
-        <span class="c-string">"input"</span>: [
-            {
-                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
-                <span class="c-string">"content"</span>: [
-                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"请结合图片生成向量。"</span>},
-                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: data_url}},
-                ],
-            }
-        ],
+        <span class="c-string">"input"</span>: <span class="c-string">"请结合图片生成向量。"</span>,
+        <span class="c-string">"image_data"</span>: data_url,
     },
 )
 vec = res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>]
@@ -1455,15 +1382,8 @@ res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-rerank"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
-        <span class="c-string">"query"</span>: [
-            {
-                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
-                <span class="c-string">"content"</span>: [
-                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>},
-                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: q_url}},
-                ],
-            }
-        ],
+        <span class="c-string">"query"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>,
+        <span class="c-string">"image_data"</span>: q_url,
         <span class="c-string">"documents"</span>: [
             <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
             <span class="c-string">"今天天气不错，与截图无关。"</span>,
@@ -1476,7 +1396,7 @@ res = requests.post(
             </div>
         </div>
         <p class="foot-note">
-            各标签均已按与 cURL 相同的六种模型/路径给出示例。OpenAI 官方 SDK 仅覆盖标准 <code>/v1/embeddings</code>；Qwen 与 VL 路径在对应标签内以 <code>requests</code> 或 <code>fetch</code> 展示。Node 示例使用顶级 <code>await</code>，需在 ES Module（<code>"type": "module"</code>）下运行或自行包入 <code>async</code> 函数。多模态 body 以当前 llama.cpp Server 版本为准。
+            各标签均已按与 cURL 相同的六种模型/路径给出示例。OpenAI 官方 SDK 仅覆盖标准 <code>/v1/embeddings</code>；Qwen 与 VL 路径在对应标签内以 <code>requests</code> 或 <code>fetch</code> 展示。Node 示例使用顶级 <code>await</code>，需在 ES Module（<code>"type": "module"</code>）下运行或自行包入 <code>async</code> 函数。VL 接口 body 为扁平字段：<code>input</code> + <code>image_data</code>（向量化），<code>query</code> + <code>image_data</code> + <code>documents</code>（重排）。
         </p>
     </section>
 
