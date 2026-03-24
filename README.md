@@ -1,8 +1,8 @@
-# 离线环境 10 节点向量化/重排序模型部署指南
+# 离线环境 9 节点向量化/重排序模型部署指南
 
 ## 📑 项目背景与环境说明
 
-本项目旨在为行内离线内网环境完整部署 **10** 个推理容器节点（向量化及重排序 / Reranker）与 Nginx 网关。由于物理机环境的特殊性，整个实施过程必须在严格的离线状态下进行。
+本项目旨在为行内离线内网环境完整部署 **9** 个推理容器节点（向量化及重排序 / Reranker）与 Nginx 网关。由于物理机环境的特殊性，整个实施过程必须在严格的离线状态下进行。
 
 **基础环境约束：**
 
@@ -32,7 +32,7 @@
 | GPU | 容器 | 模型 | VRAM（单容器参考） |
 |-----|------|------|------|
 | GPU 0 | embed-1 / embed-2 / embed-3 | BGE-M3 ×3（Infinity） | ~3.6 GB |
-| GPU 0 | embed-qwen-8b / embed-qwen-8b-2 | Qwen3-Embedding-8B Q4_K_M ×2 | 4.68 GB ×2 |
+| GPU 0 | embed-qwen-8b | Qwen3-Embedding-8B Q4_K_M ×1 | 4.68 GB |
 | GPU 0 | embed-qwen-vl | Qwen3-VL-Embedding-2B Q4_K_M + mmproj F16 | ~1.9 GB |
 | **GPU 0 合计** | | | **同卡多实例时以 `nvidia-smi` 实测为准** |
 | GPU 1 | reranker-1 / reranker-2 | BGE-Reranker-V2-M3 ×2（Infinity） | ~1.2 GB |
@@ -47,7 +47,7 @@
 | 模型 | 用途 | GGUF 来源 | HuggingFace 仓库 |
 |------|------|-----------|-----------------|
 | [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | 文本向量化 ×3（HF 格式） | — | 官方 |
-| [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) | 文本向量化 ×2 | **官方** GGUF | 官方 |
+| [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) | 文本向量化 ×1 | **官方** GGUF | 官方 |
 | [DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF](https://huggingface.co/DevQuasar/Qwen.Qwen3-VL-Embedding-2B-GGUF) | 多模态向量化 ×1 | 社区 GGUF | 社区 |
 | [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | 文本重排序 ×2（HF 格式） | — | 官方 |
 | [QuantFactory/Qwen3-Reranker-8B-GGUF](https://huggingface.co/QuantFactory/Qwen3-Reranker-8B-GGUF) | 文本重排序 ×1 | 社区 GGUF | 社区 |
@@ -355,7 +355,7 @@ sudo systemctl restart docker
 
 ## 🚀 第五阶段：Docker 镜像下载与推理服务部署
 
-本阶段采用**双引擎架构**，**10** 个推理容器节点按模型系列使用不同引擎（另含 Nginx 网关）：
+本阶段采用**双引擎架构**，**9** 个推理容器节点按模型系列使用不同引擎（另含 Nginx 网关）：
 
 | 引擎 | 镜像来源 | 服务对象 | 选型原因 |
 |------|----------|----------|----------|
@@ -443,7 +443,7 @@ embed-deploy/
 ├── models/
 │   ├── bge-m3/                               # BGE 文本向量化 ×3（HF，Infinity）
 │   ├── bge-reranker-v2-m3/                   # BGE 文本重排序 ×2（HF，Infinity）
-│   ├── Qwen3-Embedding-8B-Q4_K_M.gguf        # Qwen3 文本向量化 ×2（llama.cpp，两实例共用一个文件）
+│   ├── Qwen3-Embedding-8B-Q4_K_M.gguf        # Qwen3 文本向量化 ×1（llama.cpp）
 │   ├── Qwen3-VL-Embedding-2B-Q4_K_M.gguf     # VL 主模型
 │   ├── Qwen3-VL-Embedding-2B-mmproj_f16.gguf # VL mmproj（文件名需与 compose 中 --mmproj 一致）
 │   ├── Qwen3-Reranker-8B-Q4_K_M.gguf
@@ -485,7 +485,6 @@ docker-compose ps
 
 ```bash
 docker logs embed-qwen-8b
-docker logs embed-qwen-8b-2
 docker logs embed-qwen-vl
 docker logs reranker-qwen
 docker logs reranker-qwen-vl
@@ -500,7 +499,7 @@ docker logs reranker-qwen-vl
 | 请求路径（对外） | 内部引擎 | 路由目标 | 对应模型 |
 |-----------------|----------|----------|----------|
 | `POST /v1/embeddings` | Infinity | bge_embed_pool（**3** 节点） | BGE-M3 |
-| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-8b + embed-qwen-8b-2（**2** 节点） | Qwen3-Embedding-8B |
+| `POST /v1/qwen-embed` | llama.cpp | embed-qwen-8b（1 节点） | Qwen3-Embedding-8B |
 | `POST /v1/qwen-vl-embed` | llama.cpp | embed-qwen-vl | Qwen3-VL-Embedding-2B |
 | `POST /v1/rerank` | Infinity | bge_rerank_pool（2 节点） | BGE-Reranker-V2-M3 |
 | `POST /v1/qwen-rerank` | llama.cpp | reranker-qwen | Qwen3-Reranker-8B |
@@ -586,7 +585,7 @@ curl -X POST http://localhost/v1/qwen-vl-rerank \
 |------|----------|------|----------|
 | **模型** | `models/bge-m3/` | BGE-M3 文本向量化 ×3（HF 格式） | [Hugging Face: BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) |
 | **模型** | `models/bge-reranker-v2-m3/` | BGE-Reranker-V2-M3 文本重排序 ×2（HF 格式） | [Hugging Face: BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) |
-| **模型** | `models/*.gguf`（见上节目录树） | Qwen3 系列 GGUF（Embedding ×2 共盘、Rerank、VL+mmproj） | 见上文「模型清单与下载命令」 |
+| **模型** | `models/*.gguf`（见上节目录树） | Qwen3 系列 GGUF（Embedding、Rerank、VL+mmproj） | 见上文「模型清单与下载命令」 |
 | **镜像** | `Images/` | Infinity 推理引擎（BGE 系列） | `docker pull --platform linux/amd64 michaelf34/infinity:latest` |
 | **镜像** | `Images/` | llama.cpp CUDA Server（Qwen3 系列） | `docker pull --platform linux/amd64 ghcr.io/ggml-org/llama.cpp:server-cuda` |
 | **镜像** | `Images/` | Nginx 负载均衡 | `docker pull --platform linux/amd64 nginx:latest` |

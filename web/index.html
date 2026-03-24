@@ -689,7 +689,7 @@
                 <span class="step-num">4</span>
                 <div>
                     <strong>是否要多节点负载？</strong>
-                    <p>BGE 的 Embedding 在网关侧为<strong>三节点</strong>，Rerank 为<strong>双节点</strong>；Qwen3 文本向量化（Qwen3-Embedding-8B）为<strong>双节点</strong>，VL 与各 Rerank 仍为单节点。若要强容灾，优先 BGE 路径或在前端自己做重试。</p>
+                    <p>BGE 的 Embedding 在网关侧为<strong>三节点</strong>，Rerank 为<strong>双节点</strong>；Qwen3 文本向量化（Qwen3-Embedding-8B）为<strong>单节点</strong>，VL 与各 Rerank 仍为单节点。若要强容灾，优先 BGE 路径或在前端自己做重试。</p>
                 </div>
             </div>
         </div>
@@ -724,7 +724,7 @@
                         <td>纯文本、希望与 Qwen3 系列语义对齐</td>
                         <td><code>/v1/qwen-embed</code></td>
                         <td><code>qwen3-embedding-8b</code></td>
-                        <td>llama.cpp · 双节点</td>
+                        <td>llama.cpp · 单节点</td>
                     </tr>
                     <tr>
                         <td><span class="tag tag-vl">Qwen3-VL</span></td>
@@ -823,7 +823,7 @@
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -914,7 +914,7 @@ res = requests.post(
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1037,7 +1037,7 @@ response = client.embeddings.create(
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点，HTTP）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（HTTP）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1161,7 +1161,7 @@ res = requests.post(
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点，fetch）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（fetch）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1291,7 +1291,7 @@ docs_vectors = embeddings.embed_documents([
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（双节点，HTTP，便于封装进链）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（HTTP，便于封装进链）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
