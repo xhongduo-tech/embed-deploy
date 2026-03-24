@@ -924,7 +924,36 @@
             </div>
 
             <div id="tab-requests" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-requests">
-                <h3 class="section-title">Embedding（路径与 model 需对应）</h3>
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（双节点）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/embeddings"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"bge-m3"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 BGE 接入"</span>]},
+)
+<span class="c-func">print</span>(<span class="c-string">"BGE 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+</pre>
+                </div>
+
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-embed"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"qwen3-embedding-8b"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 Qwen3 接入"</span>]},
+)
+<span class="c-func">print</span>(<span class="c-string">"Qwen 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+</pre>
+                </div>
+
+                <h3 class="section-title">3. Qwen3-VL-Embedding-2B · 多模态向量化（本地图片）</h3>
+                <p class="vl-note">将 <code>demo.png</code> 换为实际图片路径；服务端若对 <code>input</code> 结构要求不同，以当前 llama.cpp Server 为准。</p>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -932,22 +961,7 @@
 <span class="c-keyword">import</span> pathlib
 <span class="c-keyword">import</span> requests
 
-<span class="c-comment"># BGE-M3（/v1/embeddings）</span>
-res = requests.post(
-    <span class="c-string">"http://api-embed.cs.icbc/v1/embeddings"</span>,
-    json={<span class="c-string">"model"</span>: <span class="c-string">"bge-m3"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 BGE 接入"</span>]}
-)
-<span class="c-func">print</span>(<span class="c-string">"BGE 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
-
-<span class="c-comment"># Qwen3-Embedding-8B（/v1/qwen-embed）</span>
-res = requests.post(
-    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-embed"</span>,
-    json={<span class="c-string">"model"</span>: <span class="c-string">"qwen3-embedding-8b"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 Qwen3 接入"</span>]}
-)
-<span class="c-func">print</span>(<span class="c-string">"Qwen 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
-
-<span class="c-comment"># Qwen3-VL-Embedding-2B（/v1/qwen-vl-embed）— 本地真实图片文件 → base64</span>
-img_path = pathlib.Path(<span class="c-string">"demo.png"</span>)  <span class="c-comment"># 换成你的截图 / 商品图路径</span>
+img_path = pathlib.Path(<span class="c-string">"demo.png"</span>)
 b64 = base64.standard_b64encode(img_path.read_bytes()).decode(<span class="c-string">"ascii"</span>)
 data_url = <span class="c-string">f"data:image/png;base64,{b64}"</span>
 
@@ -968,7 +982,44 @@ res = requests.post(<span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-
 </pre>
                 </div>
 
-                <h3 class="section-title">Reranker</h3>
+                <h3 class="section-title">4. BGE-Reranker · 文档重排（双节点）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"bge-reranker-v2-m3"</span>,
+        <span class="c-string">"query"</span>: <span class="c-string">"如何调用接口？"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+    },
+)
+<span class="c-func">print</span>(<span class="c-string">"BGE 重排:"</span>, res.json())
+</pre>
+                </div>
+
+                <h3 class="section-title">5. Qwen3-Reranker-8B · 文档重排</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"qwen3-reranker-8b"</span>,
+        <span class="c-string">"query"</span>: <span class="c-string">"如何调用接口？"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+    },
+)
+<span class="c-func">print</span>(<span class="c-string">"Qwen 重排:"</span>, res.json())
+</pre>
+                </div>
+
+                <h3 class="section-title">6. Qwen3-VL-Reranker-2B · 多模态重排（查询含图）</h3>
+                <p class="vl-note">将 <code>query_screenshot.png</code> 换为实际截图路径。</p>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -976,31 +1027,9 @@ res = requests.post(<span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-
 <span class="c-keyword">import</span> pathlib
 <span class="c-keyword">import</span> requests
 
-<span class="c-comment"># BGE-Reranker（/v1/rerank）</span>
-res = requests.post(
-    <span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>,
-    json={
-        <span class="c-string">"model"</span>: <span class="c-string">"bge-reranker-v2-m3"</span>,
-        <span class="c-string">"query"</span>: <span class="c-string">"网关配置"</span>,
-        <span class="c-string">"documents"</span>: [<span class="c-string">"统一域名访问模式很优雅。"</span>, <span class="c-string">"今天吃什么？"</span>]
-    }
-)
-<span class="c-func">print</span>(<span class="c-string">"BGE 重排:"</span>, res.json())
-
-<span class="c-comment"># Qwen3-Reranker-8B（/v1/qwen-rerank）</span>
-res = requests.post(
-    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-rerank"</span>,
-    json={
-        <span class="c-string">"model"</span>: <span class="c-string">"qwen3-reranker-8b"</span>,
-        <span class="c-string">"query"</span>: <span class="c-string">"网关配置"</span>,
-        <span class="c-string">"documents"</span>: [<span class="c-string">"统一域名访问模式很优雅。"</span>, <span class="c-string">"今天吃什么？"</span>]
-    }
-)
-<span class="c-func">print</span>(<span class="c-string">"Qwen 重排:"</span>, res.json())
-
-<span class="c-comment"># Qwen3-VL-Reranker-2B（/v1/qwen-vl-rerank）— 查询里带本地图片</span>
 b64_q = base64.standard_b64encode(pathlib.Path(<span class="c-string">"query_screenshot.png"</span>).read_bytes()).decode(<span class="c-string">"ascii"</span>)
 q_url = <span class="c-string">f"data:image/png;base64,{b64_q}"</span>
+
 res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-rerank"</span>,
     json={
@@ -1009,14 +1038,14 @@ res = requests.post(
             {
                 <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
                 <span class="c-string">"content"</span>: [
-                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"截图里提示了什么错误？"</span>},
+                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>},
                     {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: q_url}},
                 ],
             }
         ],
         <span class="c-string">"documents"</span>: [
-            <span class="c-string">"日志显示连接被拒绝。"</span>,
-            <span class="c-string">"与网络无关的闲聊内容。"</span>,
+            <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
+            <span class="c-string">"今天天气不错，与截图无关。"</span>,
         ],
     },
 )
@@ -1026,7 +1055,9 @@ res = requests.post(
             </div>
 
             <div id="tab-openai" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-openai">
-                <h3 class="section-title">1. Embedding（OpenAI SDK 仅标准路径；BGE 最顺）</h3>
+                <p class="vl-note">官方 Python SDK 的 <code>embeddings.create</code> 仅请求 <code>/v1/embeddings</code>，故仅条目 1 用 SDK；条目 2～6 为独立网关路径，与 cURL 一致，请用 <code>requests</code>（或 <code>httpx</code>）直调。</p>
+
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（OpenAI SDK）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1034,18 +1065,62 @@ res = requests.post(
 
 client = OpenAI(
     base_url=<span class="c-string">"http://api-embed.cs.icbc/v1"</span>,
-    api_key=<span class="c-string">"sk-internal"</span>  <span class="c-comment"># 必填，任意非空即可</span>
+    api_key=<span class="c-string">"sk-internal"</span>,  <span class="c-comment"># 必填，任意非空即可</span>
 )
-
 response = client.embeddings.create(
     model=<span class="c-string">"bge-m3"</span>,
-    input=[<span class="c-string">"测试官方 SDK 接入"</span>]
+    input=[<span class="c-string">"测试官方 SDK 接入"</span>],
 )
-<span class="c-func">print</span>(<span class="c-string">"向量:"</span>, response.data[0].embedding)
+<span class="c-func">print</span>(<span class="c-string">"BGE 向量:"</span>, response.data[0].embedding)
 </pre>
                 </div>
 
-                <h3 class="section-title">2. Reranker（OpenAI 无原生接口，请用 HTTP 客户端）</h3>
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（HTTP）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-embed"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"qwen3-embedding-8b"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 Qwen3 接入"</span>]},
+)
+<span class="c-func">print</span>(<span class="c-string">"Qwen 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+</pre>
+                </div>
+
+                <h3 class="section-title">3. Qwen3-VL-Embedding-2B · 多模态向量化（HTTP + 本地图）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> base64
+<span class="c-keyword">import</span> pathlib
+<span class="c-keyword">import</span> requests
+
+img_path = pathlib.Path(<span class="c-string">"demo.png"</span>)
+b64 = base64.standard_b64encode(img_path.read_bytes()).decode(<span class="c-string">"ascii"</span>)
+data_url = <span class="c-string">f"data:image/png;base64,{b64}"</span>
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-embed"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
+        <span class="c-string">"input"</span>: [
+            {
+                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
+                <span class="c-string">"content"</span>: [
+                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"请结合图片生成向量。"</span>},
+                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: data_url}},
+                ],
+            }
+        ],
+    },
+)
+<span class="c-func">print</span>(<span class="c-string">"VL 向量:"</span>, res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>])
+</pre>
+                </div>
+
+                <h3 class="section-title">4. BGE-Reranker · 文档重排（HTTP）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1055,9 +1130,61 @@ res = requests.post(
     <span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>,
     json={
         <span class="c-string">"model"</span>: <span class="c-string">"bge-reranker-v2-m3"</span>,
-        <span class="c-string">"query"</span>: <span class="c-string">"接口调用"</span>,
-        <span class="c-string">"documents"</span>: [<span class="c-string">"推荐使用 OpenAI SDK 接入 Embedding。"</span>]
-    }
+        <span class="c-string">"query"</span>: <span class="c-string">"如何调用接口？"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+    },
+)
+<span class="c-func">print</span>(res.json())
+</pre>
+                </div>
+
+                <h3 class="section-title">5. Qwen3-Reranker-8B · 文档重排（HTTP）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"qwen3-reranker-8b"</span>,
+        <span class="c-string">"query"</span>: <span class="c-string">"如何调用接口？"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+    },
+)
+<span class="c-func">print</span>(res.json())
+</pre>
+                </div>
+
+                <h3 class="section-title">6. Qwen3-VL-Reranker-2B · 多模态重排（HTTP + 查询侧图片）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> base64
+<span class="c-keyword">import</span> pathlib
+<span class="c-keyword">import</span> requests
+
+b64_q = base64.standard_b64encode(pathlib.Path(<span class="c-string">"query_screenshot.png"</span>).read_bytes()).decode(<span class="c-string">"ascii"</span>)
+q_url = <span class="c-string">f"data:image/png;base64,{b64_q}"</span>
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
+        <span class="c-string">"query"</span>: [
+            {
+                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
+                <span class="c-string">"content"</span>: [
+                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>},
+                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: q_url}},
+                ],
+            }
+        ],
+        <span class="c-string">"documents"</span>: [
+            <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
+            <span class="c-string">"今天天气不错，与截图无关。"</span>,
+        ],
+    },
 )
 <span class="c-func">print</span>(res.json())
 </pre>
@@ -1065,7 +1192,9 @@ res = requests.post(
             </div>
 
             <div id="tab-nodejs" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-nodejs">
-                <h3 class="section-title">OpenAI 包 + Fetch（Embedding / Rerank 示例）</h3>
+                <p class="vl-note">需 Node 18+（内置 <code>fetch</code>）。条目 1 用官方 <code>openai</code> 包；条目 2～6 与 cURL 路径一致，使用 <code>fetch</code>。</p>
+
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（openai 包）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1073,35 +1202,141 @@ res = requests.post(
 
 <span class="c-keyword">const</span> openai = <span class="c-keyword">new</span> OpenAI({
   baseURL: <span class="c-string">"http://api-embed.cs.icbc/v1"</span>,
-  apiKey: <span class="c-string">"sk-internal"</span>
+  apiKey: <span class="c-string">"sk-internal"</span>,
 });
 
-<span class="c-keyword">async function</span> <span class="c-func">embeddingBge</span>() {
-  <span class="c-keyword">const</span> r = <span class="c-keyword">await</span> openai.embeddings.create({
-    model: <span class="c-string">"bge-m3"</span>,
-    input: <span class="c-string">"测试 Node.js 接入"</span>,
-  });
-  <span class="c-func">console</span>.log(r.data[0].embedding);
-}
+<span class="c-keyword">const</span> r = <span class="c-keyword">await</span> openai.embeddings.create({
+  model: <span class="c-string">"bge-m3"</span>,
+  input: <span class="c-string">"测试 Node.js 接入"</span>,
+});
+<span class="c-func">console</span>.log(<span class="c-string">"BGE 向量:"</span>, r.data[0].embedding);
+</pre>
+                </div>
 
-<span class="c-keyword">async function</span> <span class="c-func">rerankBge</span>() {
-  <span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>, {
-    method: <span class="c-string">"POST"</span>,
-    headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
-    body: JSON.stringify({
-      model: <span class="c-string">"bge-reranker-v2-m3"</span>,
-      query: <span class="c-string">"API 网关"</span>,
-      documents: [<span class="c-string">"统一域名访问。"</span>, <span class="c-string">"无关内容。"</span>]
-    })
-  });
-  <span class="c-func">console</span>.log(<span class="c-keyword">await</span> res.json());
-}
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（fetch）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">const</span> BASE = <span class="c-string">"http://api-embed.cs.icbc"</span>;
+<span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">`${BASE}/v1/qwen-embed`</span>, {
+  method: <span class="c-string">"POST"</span>,
+  headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
+  body: JSON.stringify({
+    model: <span class="c-string">"qwen3-embedding-8b"</span>,
+    input: [<span class="c-string">"测试 Qwen3 接入"</span>],
+  }),
+});
+<span class="c-keyword">const</span> data = <span class="c-keyword">await</span> res.json();
+<span class="c-func">console</span>.log(<span class="c-string">"Qwen 向量:"</span>, data.data[0].embedding);
+</pre>
+                </div>
+
+                <h3 class="section-title">3. Qwen3-VL-Embedding-2B · 多模态向量化（fetch + 本地图）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> fs <span class="c-keyword">from</span> <span class="c-string">"node:fs"</span>;
+
+<span class="c-keyword">const</span> BASE = <span class="c-string">"http://api-embed.cs.icbc"</span>;
+<span class="c-keyword">const</span> b64 = fs.readFileSync(<span class="c-string">"demo.png"</span>).toString(<span class="c-string">"base64"</span>);
+<span class="c-keyword">const</span> dataUrl = <span class="c-string">`data:image/png;base64,${b64}`</span>;
+
+<span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">`${BASE}/v1/qwen-vl-embed`</span>, {
+  method: <span class="c-string">"POST"</span>,
+  headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
+  body: JSON.stringify({
+    model: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
+    input: [
+      {
+        role: <span class="c-string">"user"</span>,
+        content: [
+          { type: <span class="c-string">"text"</span>, text: <span class="c-string">"请结合图片生成向量。"</span> },
+          { type: <span class="c-string">"image_url"</span>, image_url: { url: dataUrl } },
+        ],
+      },
+    ],
+  }),
+});
+<span class="c-keyword">const</span> data = <span class="c-keyword">await</span> res.json();
+<span class="c-func">console</span>.log(<span class="c-string">"VL 向量:"</span>, data.data[0].embedding);
+</pre>
+                </div>
+
+                <h3 class="section-title">4. BGE-Reranker · 文档重排（fetch）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">const</span> BASE = <span class="c-string">"http://api-embed.cs.icbc"</span>;
+<span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">`${BASE}/v1/rerank`</span>, {
+  method: <span class="c-string">"POST"</span>,
+  headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
+  body: JSON.stringify({
+    model: <span class="c-string">"bge-reranker-v2-m3"</span>,
+    query: <span class="c-string">"如何调用接口？"</span>,
+    documents: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+  }),
+});
+<span class="c-func">console</span>.log(<span class="c-keyword">await</span> res.json());
+</pre>
+                </div>
+
+                <h3 class="section-title">5. Qwen3-Reranker-8B · 文档重排（fetch）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">const</span> BASE = <span class="c-string">"http://api-embed.cs.icbc"</span>;
+<span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">`${BASE}/v1/qwen-rerank`</span>, {
+  method: <span class="c-string">"POST"</span>,
+  headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
+  body: JSON.stringify({
+    model: <span class="c-string">"qwen3-reranker-8b"</span>,
+    query: <span class="c-string">"如何调用接口？"</span>,
+    documents: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+  }),
+});
+<span class="c-func">console</span>.log(<span class="c-keyword">await</span> res.json());
+</pre>
+                </div>
+
+                <h3 class="section-title">6. Qwen3-VL-Reranker-2B · 多模态重排（fetch + 查询侧图片）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> fs <span class="c-keyword">from</span> <span class="c-string">"node:fs"</span>;
+
+<span class="c-keyword">const</span> BASE = <span class="c-string">"http://api-embed.cs.icbc"</span>;
+<span class="c-keyword">const</span> b64 = fs.readFileSync(<span class="c-string">"query_screenshot.png"</span>).toString(<span class="c-string">"base64"</span>);
+<span class="c-keyword">const</span> qUrl = <span class="c-string">`data:image/png;base64,${b64}`</span>;
+
+<span class="c-keyword">const</span> res = <span class="c-keyword">await</span> fetch(<span class="c-string">`${BASE}/v1/qwen-vl-rerank`</span>, {
+  method: <span class="c-string">"POST"</span>,
+  headers: { <span class="c-string">"Content-Type"</span>: <span class="c-string">"application/json"</span> },
+  body: JSON.stringify({
+    model: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
+    query: [
+      {
+        role: <span class="c-string">"user"</span>,
+        content: [
+          { type: <span class="c-string">"text"</span>, text: <span class="c-string">"用户上传的截图里有没有错误提示？"</span> },
+          { type: <span class="c-string">"image_url"</span>, image_url: { url: qUrl } },
+        ],
+      },
+    ],
+    documents: [
+      <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
+      <span class="c-string">"今天天气不错，与截图无关。"</span>,
+    ],
+  }),
+});
+<span class="c-func">console</span>.log(<span class="c-keyword">await</span> res.json());
 </pre>
                 </div>
             </div>
 
             <div id="tab-langchain" class="code-panel" role="tabpanel" aria-labelledby="tab-btn-langchain">
-                <h3 class="section-title">LangChain · OpenAIEmbeddings（BGE 路径）</h3>
+                <p class="vl-note"><code>OpenAIEmbeddings</code> 仅对接 <code>/v1/embeddings</code>，故条目 1 为 LangChain 写法；条目 2～6 与 cURL 一致，在链路与 Agent 中请用 <code>requests</code> 封装为工具函数或 Runnable。</p>
+
+                <h3 class="section-title">1. BGE-M3 · 文本向量化（LangChain OpenAIEmbeddings）</h3>
                 <div class="code-wrapper">
                     <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
 <pre>
@@ -1111,20 +1346,137 @@ embeddings = OpenAIEmbeddings(
     openai_api_base=<span class="c-string">"http://api-embed.cs.icbc/v1"</span>,
     openai_api_key=<span class="c-string">"sk-internal"</span>,
     model=<span class="c-string">"bge-m3"</span>,
-    check_embedding_ctx_length=<span class="c-keyword">False</span>
+    check_embedding_ctx_length=<span class="c-keyword">False</span>,
 )
 
 query_vector = embeddings.embed_query(<span class="c-string">"内网部署方案"</span>)
 docs_vectors = embeddings.embed_documents([
     <span class="c-string">"文件检索工具初始化中..."</span>,
-    <span class="c-string">"采用 GPU 算力底座。"</span>
+    <span class="c-string">"采用 GPU 算力底座。"</span>,
 ])
+</pre>
+                </div>
+
+                <h3 class="section-title">2. Qwen3-Embedding-8B · 文本向量化（HTTP，便于封装进链）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-embed"</span>,
+    json={<span class="c-string">"model"</span>: <span class="c-string">"qwen3-embedding-8b"</span>, <span class="c-string">"input"</span>: [<span class="c-string">"测试 Qwen3 接入"</span>]},
+)
+vec = res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>]
+<span class="c-func">print</span>(<span class="c-string">"Qwen 向量维度:"</span>, <span class="c-func">len</span>(vec))
+</pre>
+                </div>
+
+                <h3 class="section-title">3. Qwen3-VL-Embedding-2B · 多模态向量化（HTTP + 本地图）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> base64
+<span class="c-keyword">import</span> pathlib
+<span class="c-keyword">import</span> requests
+
+img_path = pathlib.Path(<span class="c-string">"demo.png"</span>)
+b64 = base64.standard_b64encode(img_path.read_bytes()).decode(<span class="c-string">"ascii"</span>)
+data_url = <span class="c-string">f"data:image/png;base64,{b64}"</span>
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-embed"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Embedding-2B"</span>,
+        <span class="c-string">"input"</span>: [
+            {
+                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
+                <span class="c-string">"content"</span>: [
+                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"请结合图片生成向量。"</span>},
+                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: data_url}},
+                ],
+            }
+        ],
+    },
+)
+vec = res.json()[<span class="c-string">"data"</span>][0][<span class="c-string">"embedding"</span>]
+<span class="c-func">print</span>(<span class="c-string">"VL 向量维度:"</span>, <span class="c-func">len</span>(vec))
+</pre>
+                </div>
+
+                <h3 class="section-title">4. BGE-Reranker · 文档重排（HTTP）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"bge-reranker-v2-m3"</span>,
+        <span class="c-string">"query"</span>: <span class="c-string">"如何调用接口？"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+    },
+)
+<span class="c-func">print</span>(res.json())
+</pre>
+                </div>
+
+                <h3 class="section-title">5. Qwen3-Reranker-8B · 文档重排（HTTP）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> requests
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"qwen3-reranker-8b"</span>,
+        <span class="c-string">"query"</span>: <span class="c-string">"如何调用接口？"</span>,
+        <span class="c-string">"documents"</span>: [<span class="c-string">"请通过统一域名发起 POST 请求。"</span>, <span class="c-string">"今天天气不错。"</span>],
+    },
+)
+<span class="c-func">print</span>(res.json())
+</pre>
+                </div>
+
+                <h3 class="section-title">6. Qwen3-VL-Reranker-2B · 多模态重排（HTTP + 查询侧图片）</h3>
+                <div class="code-wrapper">
+                    <button type="button" class="copy-btn" onclick="copyCode(this)" aria-label="复制下方代码">复制</button>
+<pre>
+<span class="c-keyword">import</span> base64
+<span class="c-keyword">import</span> pathlib
+<span class="c-keyword">import</span> requests
+
+b64_q = base64.standard_b64encode(pathlib.Path(<span class="c-string">"query_screenshot.png"</span>).read_bytes()).decode(<span class="c-string">"ascii"</span>)
+q_url = <span class="c-string">f"data:image/png;base64,{b64_q}"</span>
+
+res = requests.post(
+    <span class="c-string">"http://api-embed.cs.icbc/v1/qwen-vl-rerank"</span>,
+    json={
+        <span class="c-string">"model"</span>: <span class="c-string">"Qwen3-VL-Reranker-2B"</span>,
+        <span class="c-string">"query"</span>: [
+            {
+                <span class="c-string">"role"</span>: <span class="c-string">"user"</span>,
+                <span class="c-string">"content"</span>: [
+                    {<span class="c-string">"type"</span>: <span class="c-string">"text"</span>, <span class="c-string">"text"</span>: <span class="c-string">"用户上传的截图里有没有错误提示？"</span>},
+                    {<span class="c-string">"type"</span>: <span class="c-string">"image_url"</span>, <span class="c-string">"image_url"</span>: {<span class="c-string">"url"</span>: q_url}},
+                ],
+            }
+        ],
+        <span class="c-string">"documents"</span>: [
+            <span class="c-string">"界面显示「连接超时」，属于网络类报错。"</span>,
+            <span class="c-string">"今天天气不错，与截图无关。"</span>,
+        ],
+    },
+)
+<span class="c-func">print</span>(res.json())
 </pre>
                 </div>
             </div>
         </div>
         <p class="foot-note">
-            Qwen3 的 <code>/v1/qwen-embed</code> 等路径与 OpenAI SDK 默认的 <code>embeddings.create</code> 基路径不完全相同；若要用 SDK 调 Qwen3，需自行封装 HTTP 或扩展客户端。多模态请求的 body 格式以当前 llama.cpp Server 版本为准。
+            各标签均已按与 cURL 相同的六种模型/路径给出示例。OpenAI 官方 SDK 仅覆盖标准 <code>/v1/embeddings</code>；Qwen 与 VL 路径在对应标签内以 <code>requests</code> 或 <code>fetch</code> 展示。Node 示例使用顶级 <code>await</code>，需在 ES Module（<code>"type": "module"</code>）下运行或自行包入 <code>async</code> 函数。多模态 body 以当前 llama.cpp Server 版本为准。
         </p>
     </section>
 
