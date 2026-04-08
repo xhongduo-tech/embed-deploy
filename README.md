@@ -549,7 +549,7 @@ curl -X POST http://localhost/v1/qwen-vl-rerank \
 
 ### 9. 页端访问
 
-启动后，在浏览器访问 **`http://<服务器IP>/`**（默认 **80** 端口）即可打开 **API 使用文档页**。文档源码在仓库 **`web/index.html`**；若你使用的 `docker-compose.yml` 将站点根目录挂载为其他路径（例如单文件 `nginx.html`），请保持挂载与编辑的源文件一致。页内提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等示例；示例域名为 `http://api-embed.cs.icbc`，实际部署时请替换为内网域名或 IP。
+启动后，在浏览器访问 **`http://<服务器IP>/`**（默认 **80** 端口）即可打开 **API 使用文档页**。文档源码在仓库 **`web/index.html`**；若你使用的 `docker-compose.yml` 将站点根目录挂载为其他路径（例如单文件 `nginx.html`），请保持挂载与编辑的源文件一致。页内提供 cURL、Requests、OpenAI SDK、Node.js、LangChain 等示例；示例域名为 `http://api-embed.cs.ixbc`，实际部署时请替换为内网域名或 IP。
 
 > **注意：** 若使用离线导入的镜像，需确保 `docker-compose.yml` 中的 `image` 名称与 `docker load` 后的镜像名一致。
 
